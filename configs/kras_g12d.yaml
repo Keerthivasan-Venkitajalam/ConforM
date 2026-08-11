@@ -1,0 +1,53 @@
+target:
+  name: KRAS_G12D
+  uniprot: P01116
+  sequence: >
+    MTEYKLVVVGADGVGKSALTIQLIQNHFVDEYDPTIEDSYRKQVVIDGETCLLDILDTAGQEEYSAMRDQYMRTGEGFLCVFAINNTKSFEDIHLYREQIKRVKDSEDVPMVLVGNKCDLPSRTVDTKQAQDLARSYGIPFIETSAKTRQGVDDAFYTLVREIRKHKEK
+  mutation: G12D
+  # PDB entries used to build a REAL (non-simulated) fallback conformational
+  # ensemble. These are experimentally deposited structures capturing distinct
+  # KRAS G12D conformational states (apo, nucleotide-bound, inhibitor-bound).
+  # This is NOT BioEmu output -- see docs/RESEARCH_CORRECTIONS.md.
+  ensemble_pdb_ids:
+    - "4DST"   # KRAS G12D, small-molecule bound at distinct (Switch-II adjacent) pocket
+    - "5US4"   # KRAS G12D bound to GDP, alternate crystal form
+    - "7RPZ"   # KRAS G12D with MRTX1133 in Switch-II pocket (ground truth)
+    - "5XCO"   # KRAS G12D, GDP/AlF3-bound (transition-state-like)
+  # NOTE (see docs/RESEARCH_CORRECTIONS.md): PDB 6ARK was originally listed here
+  # but on inspection is a KRAS G12C covalent-inhibitor structure, not G12D --
+  # dropped to keep the ensemble mutant-consistent.
+  # Baseline "apo" structure used as the featureless starting point.
+  baseline_pdb_id: "4DST"
+  ground_truth_pocket_pdb_id: "7RPZ"
+  ground_truth_pocket_residues: ["H95", "Y96", "Q99", "V9", "D69"]
+
+ensemble:
+  provider: fallback_experimental   # bioemu | fallback_experimental
+  bioemu:
+    enabled: false   # no GPU available in this environment -- see docs/LIMITATIONS.md
+    num_samples: 100
+    batch_size: 100
+    seed: 42
+
+pocket_detection:
+  provider: fpocket
+  min_alpha_spheres: 15
+
+docking:
+  engine: vina        # gnina | vina  (gnina requires GPU/CUDA build; vina runs on CPU)
+  exhaustiveness: 8
+  num_modes: 5
+  box_padding: 6.0
+
+discovery_score:
+  weights:
+    w_pocket_novelty: 0.30
+    w_volume: 0.15
+    w_binding: 0.30
+    w_state_novelty: 0.15
+    w_ligand_quality: 0.10
+    w_invalid_penalty: 0.20
+    w_cost_penalty: 0.05
+
+agent:
+  max_iterations: 5

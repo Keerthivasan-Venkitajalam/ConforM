@@ -1,0 +1,11 @@
+name,smiles,source
+Hypothetical_piperazine_pyrimidine_scaffold,COc1cc(N2CCN(C)CC2)c(F)cc1Nc1ncc(Cl)c(-c2cc3c(N)ncnc3[nH]2)n1,synthetic_test_scaffold_NOT_a_verified_drug_structure
+Hypothetical_morpholine_purine_scaffold,CC1CN(c2nc(N3CCOCC3)c3ncn(C(C)C)c3n2)CCN1,synthetic_test_scaffold_NOT_a_verified_drug_structure
+Aspirin,CC(=O)Oc1ccccc1C(=O)O,decoy_druglike
+Ibuprofen,CC(C)Cc1ccc(C(C)C(=O)O)cc1,decoy_druglike
+Caffeine,Cn1cnc2c1c(=O)n(C)c(=O)n2C,decoy_druglike
+Imatinib_fragment,Cc1ccc(NC(=O)c2ccc(CN3CCN(C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1,decoy_kinase_binder
+GDP_like_fragment,Nc1nc2c(ncn2COC2OC(COP(=O)(O)O)C(O)C2O)c(=O)[nH]1,decoy_nucleotide
+Benzene,c1ccccc1,decoy_minimal
+Toluene,Cc1ccccc1,decoy_minimal
+Ethanol,CCO,decoy_minimal
