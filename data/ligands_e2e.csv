@@ -1,0 +1,4 @@
+name,smiles,source
+Toluene,Cc1ccccc1,e2e_smoke_test_small_fast
+Benzene,c1ccccc1,e2e_smoke_test_small_fast
+Phenol,Oc1ccccc1,e2e_smoke_test_small_fast

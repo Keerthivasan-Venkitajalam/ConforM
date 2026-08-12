@@ -1,34 +1,48 @@
 # Implementation Status
 
-Environment: macOS, no CUDA GPU (`nvidia-smi` not present). Internet access available.
-All numbers below come from an actual executed run; see `artifacts/kras_g12d_p0_*/metrics/experiment_manifest.json`.
+Environment: macOS, **no CUDA GPU** (`nvidia-smi` absent). Internet available.
+All numbers below come from actually executed runs; see
+`artifacts/<experiment_id>/metrics/experiment_manifest.json` and
+`artifacts/ablation_report.json`.
 
-| Component | Status | Current implementation | Missing work | Dependency | Test status | Fallback used |
-|---|---|---|---|---|---|---|
-| Structure acquisition | Done (fallback tier) | `tools/structure_tool.py` fetches real deposited PDB structures from RCSB | OpenFold3/ESMFold inference | CUDA GPU (unavailable) | Manually run, verified real PDB content | Yes: RCSB structures instead of OpenFold3/ESMFold |
-| Conformational ensemble | Done (fallback tier) | `tools/bioemu_tool.py`; pools 4 real KRAS G12D crystal structures (4DST, 5US4, 7RPZ, 5XCO) | Real BioEmu diffusion sampling | CUDA GPU + bioemu weights | Manually run | Yes: experimental ensemble, NOT equilibrium samples — population stats are uniform-fallback, documented in code |
-| Structural analysis | Done (real) | `tools/structural_analysis.py`: Kabsch alignment, RMSD/RMSF, PCA (MDAnalysis + numpy SVD) | TICA (deliberately not used — invalid for unordered ensemble; see RESEARCH_CORRECTIONS.md) | MDAnalysis | Manually run, produced real numbers | No |
-| Pocket detection | Done (real, fallback tier) | `tools/mdpocket_tool.py` runs real `fpocket 4.0` per ensemble member, parses actual volumes/druggability/residues | True `mdpocket` multi-frame trajectory mode (needs atom-identical frames, incompatible with heterogeneous crystal structures) | fpocket (conda-forge) | Manually run; recovered ground-truth Switch-II residues (H95/Y96/Q99) with 100% overlap in 7RPZ | Yes: independent fpocket runs instead of true mdpocket ensemble mode |
-| Pocket ranking | Done (real) | Deterministic rank by druggability + ground-truth residue overlap in `pipelines/pocket_discovery.py` | Configurable weight file (`configs/discovery_score.yaml`) not yet split out | none | Manually run | No |
-| Ligand validation | Done (real) | `tools/rdkit_tool.py`: sanitize, canonicalize, Lipinski, QED, 3D ETKDG embed + MMFF optimize | Larger library (ChEMBL subset) | RDKit (conda-forge) | Manually run, 10/10 ligands valid | No |
-| Docking | Done (real, fallback tier) | `tools/docking_tool.py`: real AutoDock Vina 1.2.7 Python bindings, OpenBabel PDBQT prep | GNINA CNN rescoring, DiffDock-Pocket refinement | CUDA (GNINA CNN backend, DiffDock model) | Manually run, 10/10 ligands docked with real affinities (-9.6 to -2.8 kcal/mol) | Yes: Vina empirical scoring only, no CNN rescore |
-| Discovery Score | Done (real) | `agent/discovery_score.py`, pure deterministic function, documented formula | Configurable weights YAML not yet split out (weights live in kras_g12d.yaml) | none | Manually run | No |
-| Ligand optimization (REINVENT4) | Not started | — | Full module | REINVENT4 (Apache 2.0, CPU-installable in principle) | none | Not yet implemented — P0 run screens the fixed library only |
-| Agent / closed loop | Not started | — | State machine, iteration loop, memory | none | none | — |
-| Scientific memory (DB) | Not started | Only filesystem JSON manifest exists | PostgreSQL/pgvector or SQLite repository layer | postgres/sqlite | none | — |
-| MCP layer | Not started | — | Pydantic tool schemas | none | none | — |
-| Dashboard | Not started | — | Streamlit + py3Dmol | streamlit, py3Dmol | none | — |
-| Evaluation / CryptoBench / ablations | Not started | — | Baseline comparison scripts | CryptoBench data | none | — |
-| Docker/Postgres compose | Not started | — | docker-compose.yml | docker (installed) | none | — |
+Verify everything with `./validate_e2e.sh` (16 checks, all currently PASS).
 
-## What genuinely ran (verifiable in `artifacts/`)
-- 4 real KRAS G12D PDB structures downloaded from RCSB (4DST, 5US4, 7RPZ, 5XCO)
-- Real Kabsch alignment + RMSD/RMSF/PCA over 163 common Cα residues
-- Real `fpocket 4.0` run on each of the 4 structures (49 total raw pocket candidates)
-- Real ligand pocket in 7RPZ recovered with residues H95, Y96, Q99 (100% overlap with documented ground truth)
-- Real RDKit validation/3D embedding of 10 ligands
-- Real AutoDock Vina 1.2.7 docking of all 10 ligands into the recovered pocket, exhaustiveness=8, 5 poses each
-- Deterministic Discovery Score computed from the above, best = 0.8332 for a synthetic scaffold at -9.6 kcal/mol
+| Component | Status | Implementation | Missing work | Test status | Fallback used |
+|---|---|---|---|---|---|
+| Structure acquisition | **Done** (fallback tier) | `tools/structure_tool.py` — provider chain, fetches real RCSB structures | OpenFold3/ESMFold inference | E2E PASS | Yes: RCSB instead of OpenFold3/ESMFold |
+| Conformational ensemble | **Done** (fallback tier) | `tools/bioemu_tool.py` — 4 real KRAS G12D structures (4DST, 5US4, 7RPZ, 5XCO) | Real BioEmu diffusion sampling | E2E PASS | Yes: experimental ensemble; NOT equilibrium samples |
+| Structural analysis | **Done** (real) | `tools/structural_analysis.py` — Kabsch, RMSD/RMSF, PCA | TICA (deliberately excluded, invalid here) | E2E PASS | No |
+| Pocket detection | **Done** (real, fallback tier) | `tools/mdpocket_tool.py` — real fpocket 4.0 per structure | True mdpocket trajectory mode | E2E PASS | Yes: per-structure fpocket |
+| Cross-state pocket families | **Done** (real) | `pipelines/engines.py` — Jaccard clustering, persistence, novelty vs. apo baseline | Volumetric grid persistence | 4 unit tests PASS | No |
+| Pocket ranking | **Done** (real) | Blind: druggability + novelty + volume; ground truth excluded | Weights not yet split to own YAML | Unit test PASS | No |
+| Ligand validation | **Done** (real) | `tools/rdkit_tool.py` — sanitize, Lipinski, QED, ETKDG+MMFF | ChEMBL-scale library | 4 unit tests PASS | No |
+| Docking | **Done** (real, fallback tier) | `tools/docking_tool.py` — real AutoDock Vina 1.2.7 | GNINA CNN rescoring, DiffDock-Pocket | E2E PASS | Yes: Vina empirical scoring |
+| Ligand optimization | **Done** (fallback tier) | `tools/reinvent_tool.py` — RDKit R-group enumeration | REINVENT 4 RL loop | E2E PASS | Yes; **and it did not improve results — see BENCHMARKS.md** |
+| Discovery Score | **Done** (real) | `agent/discovery_score.py` — deterministic, absolute affinity normalization | — | 6 unit tests PASS | No |
+| Agent state machine | **Done** (real) | `agent/state.py`, `agent/policies.py` | LLM proposal layer on top of policy | 10 unit tests PASS | No |
+| Closed loop | **Done** (real) | `agent/loop_controller.py` — 2 real iterations executed | Multi-pocket exploration branches | E2E PASS (asserts ≥2 iterations) | No |
+| Scientific memory | **Done** (real) | `db/repository.py` + `schema.sql`, SQLite | PostgreSQL/pgvector code path | 5 unit tests PASS | SQLite instead of Postgres |
+| Duplicate detection | **Done** (real) | SHA-256 action hashes, enforced in loop | — | Unit + E2E PASS | No |
+| Evaluation / baselines / ablations | **Done** (real) | `evaluation/` — 5 modes all executed | CryptoBench full dataset | E2E PASS | Baseline 3 (1 µs MD) omitted, not approximated |
+| Report generator | **Done** (real) | `scripts/generate_report.py` → HTML with SVG plots + py3Dmol | — | E2E PASS | No |
+| Dashboard | **Done** (real) | `visualization/dashboard.py` — Streamlit, consumes real artifacts | — | E2E PASS (import + parse) | No |
+| CLI | **Done** | `scripts/run_experiment.py` — setup/validate/run/benchmark/ablate/report/dashboard/history | — | Manually verified | No |
+| Docker | **Partial** | `docker-compose.yml` + `docker/Dockerfile` written | **Never built or run** on this host | Not tested | — |
+| MCP layer | **Not started** | — | Pydantic tool schemas, MCP server | — | Local pipeline works without it |
+| CryptoBench | **Not started** | — | Dataset download + evaluation harness | — | KRAS-specific ground truth used |
+| DiffDock-Pocket / OpenMM | **Not started** | — | P5 items | — | — |
 
-## What did NOT run (and why)
-See `docs/LIMITATIONS.md` for the full list (BioEmu, OpenFold3, GNINA, DiffDock-Pocket, REINVENT4 — all require a CUDA GPU or additional integration work not completed in this pass).
+## Headline result (real)
+Blind ranking selects **7RPZ:pocket1** — novelty 1.00 (absent from apo
+baseline), persistence 0.25 (present in 1 of 4 states), **100% overlap with
+documented Switch-II ground-truth residues**. The `static` baseline scores
+0.00 recall. Full table in [BENCHMARKS.md](BENCHMARKS.md).
+
+## Honest caveats
+- Ligand optimization produced a 0.07 kcal/mol change — inside noise. It did
+  **not** reproduce the research plan's expected ablation effect.
+- The ensemble is 4 crystal structures, not a Boltzmann sample; state
+  populations are uniform placeholders.
+- The library is 10 molecules; enrichment is a smoke test, not a benchmark.
+- Docking is Vina empirical scoring, unvalidated against CNN or experimental data.
+- `docker-compose.yml` and the Dockerfile are written but were never built.

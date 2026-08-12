@@ -1,61 +1,148 @@
-# ConforM-Agent (P0 slice)
+# ConforM-Agent
 
-A closed-loop scientific pipeline for discovering transient/cryptic druggable
-pockets on KRAS G12D and screening ligand hypotheses against them.
+**A closed-loop scientific agent that explores protein conformational state
+space to find transient (cryptic) binding pockets and evaluate ligand
+hypotheses against them.**
 
-**Status: P0 deterministic pipeline only.** The autonomous agent, ligand
-optimization loop, database, MCP layer, and dashboard described in the full
-research plan are **not yet built** — see `docs/IMPLEMENTATION_STATUS.md` for
-the exact breakdown of what runs today vs. what remains.
+Demonstration target: **KRAS G12D**, validated against the documented
+Switch-II cryptic pocket.
 
-## Scientific honesty note
-This is a computational hypothesis-generation tool. It never claims a ligand
-"binds" KRAS — only that it produced a favorable score under the evaluated
-computational protocol. See `docs/LIMITATIONS.md` before interpreting any
-number below.
+---
 
-## What actually runs today
-`sequence → real RCSB structures (fallback for OpenFold3/BioEmu, no GPU
-here) → RMSD/RMSF/PCA (MDAnalysis) → fpocket pocket detection → RDKit ligand
-validation → AutoDock Vina docking → deterministic Discovery Score`
+## ⚠️ Scientific honesty notice
 
-This recovers the documented Switch-II ground-truth pocket residues
-(H95/Y96/Q99) from PDB 7RPZ with 100% overlap, and docks a small ligand set
-into it with real Vina affinities. See `docs/RESEARCH_CORRECTIONS.md` for
-where this deviates from the original research plan and why.
+This is a **computational hypothesis-generation platform**. It does not
+demonstrate that any molecule binds KRAS G12D.
+
+- A favorable docking score means *"this ligand produced a favorable
+  computational docking score under the evaluated protocol"* — nothing more.
+- Recovering the Switch-II pocket is **known ground-truth recovery**, which
+  validates the method. It is **not** a novel biological discovery: that
+  pocket is well characterized and already drugged (MRTX1133).
+- Several models from the original design (BioEmu, OpenFold3, GNINA,
+  DiffDock-Pocket, REINVENT 4) **could not be executed on this CPU-only
+  machine**. Documented fallbacks were used and are labeled as such in every
+  manifest, report, and dashboard view. See [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+
+---
+
+## What it does
+
+```
+KRAS G12D
+   ↓  structure acquisition        (OpenFold3 → ESMFold → RCSB)      [RCSB used]
+   ↓  conformational ensemble      (BioEmu → experimental ensemble)  [experimental used]
+   ↓  structural analysis          RMSD / RMSF / PCA
+   ↓  pocket detection             (mdpocket → fpocket → P2Rank)     [fpocket used]
+   ↓  cross-state pocket families  persistence + novelty vs. apo baseline
+   ↓  blind pocket ranking         druggability + novelty + volume
+   ↓  ligand validation            RDKit sanitize / 3D embed / Lipinski / QED
+   ↓  docking                      (GNINA → Vina)                    [Vina used]
+   ↓  Discovery Score              deterministic Python, never LLM-generated
+   ↓  agent decision               screen? optimize? stop?
+   ↺  next experiment
+```
+
+The agent decides what to run next from an explicit state machine
+([agent/policies.py](agent/policies.py)) — it is not a hard-coded linear
+pipeline. Scientific engines are independently callable without any agent or
+LLM.
+
+## Key result (real executed run)
+
+Blind ranking — with ground-truth overlap explicitly **excluded** from the
+objective — selects a cavity that is:
+
+- **absent from the apo baseline structure** (novelty 1.00, baseline volume 0 Å³)
+- **present in only 1 of 4 sampled states** (persistence 0.25 — genuinely transient)
+- **covering 100% of the documented Switch-II ground-truth residues** (H95, Y96, Q99, V9, D69)
+
+The `static` baseline, given only the apo structure, instead selects the
+always-open nucleotide site: ground-truth recall **0.00**. This is the
+central experimental claim, and it is reproducible with `./validate_e2e.sh`.
+
+> Design note: the first version of this ranking used druggability + volume
+> only and also selected the nucleotide site. Crypticity had to be *in the
+> objective* for the system to work. See [docs/SCIENTIFIC_METHOD.md](docs/SCIENTIFIC_METHOD.md).
 
 ## Quick start
 
 ```bash
 conda env create -f environment.yml
 conda activate conform
-python pipelines/pocket_discovery.py
+export PYTHONPATH=.
+
+python scripts/run_experiment.py validate
+./run_demo.sh
 ```
 
-Artifacts (structures, pockets, ligands, docking poses, experiment manifest,
-agent log) are written to `artifacts/kras_g12d_p0_<timestamp>/`.
-
-## Tests
+Individual commands:
 
 ```bash
-conda activate conform
+python scripts/run_experiment.py run --target kras-g12d --closed-loop
+python scripts/run_experiment.py benchmark --target kras-g12d
+python scripts/run_experiment.py ablate --mode static
+python scripts/run_experiment.py report
+python scripts/run_experiment.py dashboard
+python scripts/run_experiment.py history --verbose
+```
+
+## Validation
+
+```bash
+./validate_e2e.sh      # 16 checks, executes every real tool
 python -m pytest tests/ -q
 ```
 
-## Repository layout
+`validate_e2e.sh` prints PASS only when the check actually succeeded — it
+runs real fpocket, real Vina docking, a real 2-iteration closed loop, and
+real report generation.
+
+## Requirements
+
+**No GPU required.** Everything currently implemented runs on CPU. A full
+KRAS closed-loop run takes ~4 minutes on a laptop. BioEmu / OpenFold3 /
+GNINA / DiffDock-Pocket / REINVENT 4 would each need CUDA; the provider
+interfaces for them exist and are documented in
+[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+
+## Project structure
 
 ```
-agent/          discovery_score.py (deterministic scoring — no LLM/agent loop yet)
-tools/          structure_tool, bioemu_tool, structural_analysis, mdpocket_tool, rdkit_tool, docking_tool
-pipelines/      pocket_discovery.py (P0 end-to-end runner)
-configs/        kras_g12d.yaml (target, fallback ensemble PDB IDs, weights)
-data/           ligands_kras.csv (small test ligand library)
-docs/           IMPLEMENTATION_STATUS.md, LIMITATIONS.md, RESEARCH_CORRECTIONS.md
-tests/          unit tests for discovery_score, RDKit validation, pocket parsing
-artifacts/      per-experiment outputs (gitignored)
+agent/          state.py · policies.py · loop_controller.py · discovery_score.py
+tools/          structure · bioemu · structural_analysis · mdpocket · rdkit · docking · reinvent
+pipelines/      engines.py (deterministic engine layer) · pocket_discovery.py (P0 runner)
+db/             schema.sql · repository.py   (SQLite default, Postgres/pgvector declared)
+evaluation/     metrics · baselines · ablations · cryptic_recovery
+visualization/  dashboard.py (Streamlit) · molecular_viewer.py (py3Dmol) · plots.py (SVG)
+scripts/        run_experiment.py (CLI) · generate_report.py
+configs/        kras_g12d.yaml
+tests/          34 tests
+docs/           ARCHITECTURE · SCIENTIFIC_METHOD · EXPERIMENT_PROTOCOL · BENCHMARKS
+                LIMITATIONS · RESEARCH_CORRECTIONS · DEPENDENCIES · IMPLEMENTATION_STATUS
 ```
 
-## GPU requirements
-None of the currently implemented code requires a GPU. BioEmu, OpenFold3,
-GNINA, and DiffDock-Pocket (from the full research plan) all require CUDA
-and are not yet integrated — see `docs/LIMITATIONS.md`.
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layering, closed loop, why the agent can't fake results |
+| [SCIENTIFIC_METHOD.md](docs/SCIENTIFIC_METHOD.md) | Hypothesis, Discovery Score, blind-evaluation discipline |
+| [EXPERIMENT_PROTOCOL.md](docs/EXPERIMENT_PROTOCOL.md) | Exact parameters, reproduction steps, artifacts |
+| [BENCHMARKS.md](docs/BENCHMARKS.md) | Baselines, ablations, what each metric does and does not mean |
+| [LIMITATIONS.md](docs/LIMITATIONS.md) | What did not run and the scientific consequences |
+| [RESEARCH_CORRECTIONS.md](docs/RESEARCH_CORRECTIONS.md) | Where the original plan was wrong or infeasible |
+| [DEPENDENCIES.md](docs/DEPENDENCIES.md) | Versions, licenses, GPU-worker isolation strategy |
+| [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | Component-by-component status table |
+
+## Licenses
+
+All dependencies are open source. Note that Open Babel and MDAnalysis are
+GPL-licensed and are used here as a library/subprocess — see
+[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the full audit.
+
+## Citation
+
+If this architecture is useful, cite the underlying tools — RDKit, fpocket
+(Le Guilloux et al. 2009), AutoDock Vina (Eberhardt et al. 2021), MDAnalysis,
+Open Babel — and the KRAS G12D / MRTX1133 structural literature (PDB 7RPZ).

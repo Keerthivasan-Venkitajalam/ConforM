@@ -1,0 +1,47 @@
+# PostgreSQL + pgvector for the scientific-memory backend.
+#
+# NOTE: the pipeline defaults to SQLite and does NOT require this stack. The
+# Postgres backend path in db/repository.py is declared but not exercised in
+# this build (see docs/LIMITATIONS.md) -- this compose file provisions the
+# database so that integration can be completed, it does not imply the
+# application currently reads from it.
+#
+# The scientific GPU dependencies (BioEmu, GNINA, REINVENT4) are deliberately
+# NOT containerized here: their CUDA/PyTorch requirements conflict and
+# containerizing them adds complexity without benefit on a CPU-only host.
+# See docs/DEPENDENCIES.md for the isolated-worker strategy.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: conform
+      POSTGRES_PASSWORD: conform
+      POSTGRES_DB: conform
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Unset to use the default SQLite backend.
+      CONFORM_DB_URL: postgresql://conform:conform@postgres:5432/conform
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+    command: ["python", "scripts/run_experiment.py", "validate"]
+
+volumes:
+  pgdata:
