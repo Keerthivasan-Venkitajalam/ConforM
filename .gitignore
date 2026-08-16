@@ -7,3 +7,4 @@ __pycache__/
 
 # Private reference documents — never commit
 *.txt
+!LICENSE

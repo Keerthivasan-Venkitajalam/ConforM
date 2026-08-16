@@ -1,0 +1,37 @@
+GNU GENERAL PUBLIC LICENSE
+Version 2, June 1991
+
+Copyright (C) 2026 Keerthivasan S V
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc.,
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+Full text: https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+
+---------------------------------------------------------------------
+WHY GPL-2.0
+
+ConforM-Agent invokes Open Babel (GPL-2.0) and MDAnalysis (GPL-2.0+) and
+is designed to integrate GNINA (GPL-2.0). Distributing this project as a
+combined work therefore requires a GPL-compatible license. See
+docs/DEPENDENCIES.md for the full third-party license audit.
+
+Third-party components retain their own licenses:
+  RDKit           BSD-3-Clause
+  fpocket         MIT / BSD-3-Clause
+  AutoDock Vina   Apache-2.0
+  Open Babel      GPL-2.0
+  MDAnalysis      GPL-2.0+
+  Streamlit       Apache-2.0
+  py3Dmol         BSD-3-Clause
