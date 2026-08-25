@@ -16,7 +16,8 @@ Verify everything with `./validate_e2e.sh` (16 checks, all currently PASS).
 | Cross-state pocket families | **Done** (real) | `pipelines/engines.py` — Jaccard clustering, persistence, novelty vs. apo baseline | Volumetric grid persistence | 4 unit tests PASS | No |
 | Pocket ranking | **Done** (real) | Blind: druggability + novelty + volume; ground truth excluded | Weights not yet split to own YAML | Unit test PASS | No |
 | Ligand validation | **Done** (real) | `tools/rdkit_tool.py` — sanitize, Lipinski, QED, ETKDG+MMFF | ChEMBL-scale library | 4 unit tests PASS | No |
-| Docking | **Done** (real, fallback tier) | `tools/docking_tool.py` — real AutoDock Vina 1.2.7 | GNINA CNN rescoring, DiffDock-Pocket | E2E PASS | Yes: Vina empirical scoring |
+| Docking | **Done** (real, fallback tier) | `tools/docking_tool.py` — real AutoDock Vina 1.2.7 | GNINA needs a live GPU run (code ready, see below); DiffDock-Pocket not started | E2E PASS | Yes: Vina empirical scoring |
+| GNINA CNN rescoring | **Written, unverified live** | `tools/gnina_tool.py` + `scripts/gnina_rescore.py` — real CLI wrapper against prebuilt v1.3.2 binary, standalone post-pass over Vina results (not wired into closed loop, to protect the tested CPU path) | End-to-end run on GPU | 3 unit tests PASS (SDF-property parsing only) | Requires CUDA; run via `scripts/gpu_session.sh` |
 | Ligand optimization | **Done** (fallback tier) | `tools/reinvent_tool.py` — RDKit R-group enumeration | REINVENT 4 RL loop | E2E PASS | Yes; **and it did not improve results — see BENCHMARKS.md** |
 | Discovery Score | **Done** (real) | `agent/discovery_score.py` — deterministic, absolute affinity normalization | — | 6 unit tests PASS | No |
 | Agent state machine | **Done** (real) | `agent/state.py`, `agent/policies.py` | LLM proposal layer on top of policy | 10 unit tests PASS | No |

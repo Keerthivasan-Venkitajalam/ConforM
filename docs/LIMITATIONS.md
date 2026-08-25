@@ -5,14 +5,14 @@ This build was developed and executed on a Mac with **no CUDA-capable GPU**
 (`nvidia-smi` is not present). The research plan's MVP assumes a single
 RTX 4090 (24GB VRAM). Every GPU-dependent model below could not be run here:
 
-| Tool | Why it can't run here | What ran instead |
+| Tool | Why it can't run here | What ran instead / status |
 |---|---|---|
-| BioEmu | Diffusion-model inference requires CUDA | 4 real experimental KRAS G12D crystal structures used as an ensemble (`tools/bioemu_tool.py`) |
-| OpenFold3 | AlphaFold3-scale model, requires high-VRAM GPU | Structures fetched directly from RCSB (`tools/structure_tool.py`) |
+| BioEmu | Diffusion-model inference requires CUDA | 4 real experimental KRAS G12D crystal structures used as fallback ensemble (`tools/bioemu_tool.py`). **Real implementation written and ready** (`BioEmuProvider`, gated on `nvidia-smi`) — untested end-to-end pending GPU compute; see `scripts/gpu_session.sh`. |
+| OpenFold3 | AlphaFold3-scale model, requires high-VRAM GPU | Structures fetched directly from RCSB (`tools/structure_tool.py`); no provider written |
 | ESMFold | Runs on GPU or very slow CPU; not installed | Not exercised — RCSB fetch used directly |
-| GNINA | 3D CNN scoring backend needs a CUDA-built fork of Caffe | Plain AutoDock Vina empirical scoring only |
-| DiffDock-Pocket | Diffusion pose model, GPU required | Not run |
-| REINVENT4 | RL training loop is GPU-accelerated in practice, and was not integrated in this pass at all | Not run; ligand library screened as a fixed set |
+| GNINA | 3D CNN scoring; needs CUDA | Plain AutoDock Vina empirical scoring used in all reported results. **Real wrapper written** (`tools/gnina_tool.py`, `scripts/gnina_rescore.py`) against a prebuilt v1.3.2 binary (no build required) and unit-tested against a realistic SDF fixture — but never run against a live GNINA process, since that needs the same GPU. Kept as a standalone rescoring pass over Vina results rather than wired into the closed loop, so the tested CPU pipeline can't regress. |
+| DiffDock-Pocket | Diffusion pose model, GPU required | Not run, no wrapper written |
+| REINVENT4 | RL training loop is GPU-accelerated in practice, and was not integrated in this pass at all | Not run; RDKit R-group enumeration fallback used instead |
 
 ## Consequences for scientific interpretation
 - The "ensemble" used here is **not** a Boltzmann-weighted equilibrium sample. It is

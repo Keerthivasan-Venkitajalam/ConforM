@@ -27,10 +27,10 @@ in the submission's license section.
 ## Declared in the plan but NOT installed or executed
 | Package | License | Why not | Consequence |
 |---|---|---|---|
-| BioEmu | MIT / Apache-2.0 | CUDA GPU required; none on host | Experimental-structure ensemble fallback |
+| BioEmu | MIT / Apache-2.0 | CUDA GPU required; none on host | Experimental-structure ensemble fallback; real provider written, `pip install bioemu[cuda]`, untested pending GPU |
 | OpenFold3 | Apache-2.0 | High-VRAM GPU + weights | RCSB structures used |
 | ESMFold | MIT | GPU (or impractically slow CPU) | Not exercised |
-| GNINA | GPL-2.0 / Apache-2.0 | CUDA-built Caffe fork required | Vina empirical scoring only |
+| GNINA | GPL-2.0 / Apache-2.0 | CUDA GPU required for CNN inference | Vina empirical scoring only in reported results; real wrapper written against the **prebuilt v1.3.2 binary release** (no build/Caffe compile needed — earlier notes in this doc overstated the install difficulty), unit-tested parsing, untested live pending GPU |
 | DiffDock-Pocket | MIT | GPU diffusion model | Not run |
 | REINVENT 4 | Apache-2.0 | Prior checkpoints + GPU RL loop; not integrated | RDKit R-group enumeration fallback |
 | CryptoBench | MIT | Full benchmark needs ~1,107 apo-holo pairs | KRAS-specific ground truth used instead |
