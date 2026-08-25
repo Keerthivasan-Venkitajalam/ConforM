@@ -32,15 +32,31 @@ Verify everything with `./validate_e2e.sh` (16 checks, all currently PASS).
 | CryptoBench | **Not started** | — | Dataset download + evaluation harness | — | KRAS-specific ground truth used |
 | DiffDock-Pocket / OpenMM | **Not started** | — | P5 items | — | — |
 
-## Headline result (real)
-Blind ranking selects **7RPZ:pocket1** — novelty 1.00 (absent from apo
-baseline), persistence 0.25 (present in 1 of 4 states), **100% overlap with
-documented Switch-II ground-truth residues**. The `static` baseline scores
-0.00 recall. Full table in [BENCHMARKS.md](BENCHMARKS.md).
+## Headline result (real, apo-only ensemble, 2026-08-25)
+Blind ranking selects **5XCO:pocket2** — novelty 1.00 (absent from apo
+baseline), persistence 0.25 (present in 1 of 4 states), **40% recall of
+documented Switch-II ground-truth residues** (H95, Y96 recovered; Q99, V9,
+D69 not). The `static` baseline scores 0.00 recall. Full table in
+[BENCHMARKS.md](BENCHMARKS.md).
+
+**This supersedes an earlier 100%-recall result** obtained when PDB 7RPZ
+(MRTX1133-bound) was included in the discovery ensemble — that inhibitor
+itself forces the pocket open, making that result circular. It has been
+retracted; see [RESEARCH_CORRECTIONS.md](RESEARCH_CORRECTIONS.md) #7 for the
+full HETATM audit and fix. The corrected ensemble contains only structures
+with no synthetic ligand bound anywhere.
 
 ## Honest caveats
-- Ligand optimization produced a 0.07 kcal/mol change — inside noise. It did
-  **not** reproduce the research plan's expected ablation effect.
+- **The corrected ensemble only partially recovers the cryptic site** (40%,
+  below this project's own 60% "recovered" threshold). Static apo crystal
+  heterogeneity alone is not sufficient to fully open Switch-II — real
+  generative sampling (BioEmu) is the intended way to close this gap and has
+  not yet been run (no GPU on this machine; `tools/bioemu_tool.py` now has a
+  real, CUDA-gated implementation ready to run on rented compute).
+- Ligand optimization in the corrected run improved affinity by 0.76
+  kcal/mol (a different pocket/seed ligand than the earlier retracted run,
+  so not directly comparable) — still a single run on 12 analogs, not a
+  validated claim.
 - The ensemble is 4 crystal structures, not a Boltzmann sample; state
   populations are uniform placeholders.
 - The library is 10 molecules; enrichment is a smoke test, not a benchmark.

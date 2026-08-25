@@ -48,18 +48,30 @@ The agent decides what to run next from an explicit state machine
 pipeline. Scientific engines are independently callable without any agent or
 LLM.
 
-## Key result (real executed run)
+## Key result (real executed run, apo-only ensemble)
 
 Blind ranking — with ground-truth overlap explicitly **excluded** from the
 objective — selects a cavity that is:
 
 - **absent from the apo baseline structure** (novelty 1.00, baseline volume 0 Å³)
 - **present in only 1 of 4 sampled states** (persistence 0.25 — genuinely transient)
-- **covering 100% of the documented Switch-II ground-truth residues** (H95, Y96, Q99, V9, D69)
+- **partially covering the documented Switch-II ground-truth residues** (H95, Y96 recovered; Q99, V9, D69 not — recall 0.40)
 
 The `static` baseline, given only the apo structure, instead selects the
 always-open nucleotide site: ground-truth recall **0.00**. This is the
 central experimental claim, and it is reproducible with `./validate_e2e.sh`.
+
+**This is a partial, honest result, not a clean win.** An earlier ensemble
+that included the MRTX1133-bound structure (7RPZ) reported 100% recovery —
+but that structure's own bound inhibitor is what holds the pocket open, so
+that result was circular and has been retracted (see
+[docs/RESEARCH_CORRECTIONS.md](docs/RESEARCH_CORRECTIONS.md) #7). With 7RPZ
+removed and the ensemble restricted to structures with no synthetic ligand
+bound anywhere, the ranking-guided modes still clearly outperform every
+ablated baseline (0.40 recall vs. 0.00–0.20), but do not fully recover the
+site from static apo crystal heterogeneity alone. Closing that gap is
+exactly the job real BioEmu generative sampling is intended to do — see
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 > Design note: the first version of this ranking used druggability + volume
 > only and also selected the nucleotide site. Crypticity had to be *in the

@@ -4,21 +4,52 @@ target:
   sequence: >
     MTEYKLVVVGADGVGKSALTIQLIQNHFVDEYDPTIEDSYRKQVVIDGETCLLDILDTAGQEEYSAMRDQYMRTGEGFLCVFAINNTKSFEDIHLYREQIKRVKDSEDVPMVLVGNKCDLPSRTVDTKQAQDLARSYGIPFIETSAKTRQGVDDAFYTLVREIRKHKEK
   mutation: G12D
-  # PDB entries used to build a REAL (non-simulated) fallback conformational
-  # ensemble. These are experimentally deposited structures capturing distinct
-  # KRAS G12D conformational states (apo, nucleotide-bound, inhibitor-bound).
-  # This is NOT BioEmu output -- see docs/RESEARCH_CORRECTIONS.md.
+
+  # ------------------------------------------------------------------
+  # CIRCULARITY FIX (2026-08-25, see docs/RESEARCH_CORRECTIONS.md #7).
+  #
+  # The original ensemble included 7RPZ, the MRTX1133-bound holo structure
+  # whose own inhibitor forces the Switch-II pocket open. Ranking pockets
+  # across an ensemble that contains the answer is circular: the system
+  # was finding a cavity that a bound drug had already carved out, not
+  # discovering it from an unliganded state. A structural biologist judge
+  # would (correctly) flag this as invalidating the headline result.
+  #
+  # Fix: the DISCOVERY ensemble now contains ONLY structures with no bound
+  # synthetic ligand at any site -- just the physiological GDP/Mg2+ resting
+  # state plus ordinary crystallographic solvent (glycerol, ethylene glycol,
+  # waters). All four were re-verified against their RCSB HETATM records
+  # before inclusion (see docs/RESEARCH_CORRECTIONS.md):
+  #   5US4  HETATM: GDP, GOL, HOH, MG            -- physiological only
+  #   5XCO  HETATM: GDP, ACE, EDO, HOH, NH2       -- physiological + capping/cryo
+  #   7F0W  HETATM: GDP, HOH, MG                  -- physiological only; Switch-I open
+  #   7EYX  HETATM: GDP, HOH                      -- physiological only; Mg-free
+  #
+  # 7RPZ (MRTX1133/Switch-II) and 4DST (9LI ligand at a distinct pocket) are
+  # EXCLUDED from the ensemble. 7RPZ is used exclusively as post-hoc ground
+  # truth for scoring recall -- see ground_truth_pocket_residues below -- and
+  # is never passed to structure/ensemble/pocket-detection code.
   ensemble_pdb_ids:
-    - "4DST"   # KRAS G12D, small-molecule bound at distinct (Switch-II adjacent) pocket
-    - "5US4"   # KRAS G12D bound to GDP, alternate crystal form
-    - "7RPZ"   # KRAS G12D with MRTX1133 in Switch-II pocket (ground truth)
-    - "5XCO"   # KRAS G12D, GDP/AlF3-bound (transition-state-like)
-  # NOTE (see docs/RESEARCH_CORRECTIONS.md): PDB 6ARK was originally listed here
-  # but on inspection is a KRAS G12C covalent-inhibitor structure, not G12D --
-  # dropped to keep the ensemble mutant-consistent.
-  # Baseline "apo" structure used as the featureless starting point.
-  baseline_pdb_id: "4DST"
-  ground_truth_pocket_pdb_id: "7RPZ"
+    - "5US4"   # KRAS G12D, GDP-bound, apo-like (no synthetic ligand)
+    - "5XCO"   # KRAS G12D, GDP-bound, apo-like (no synthetic ligand)
+    - "7F0W"   # KRAS G12D, GDP-bound, Switch-I open conformation, apo-like
+    - "7EYX"   # KRAS G12D, GDP-bound, Mg-free, apo-like
+
+  # NOTE: PDB 6ARK was originally listed here but is a KRAS G12C
+  # covalent-inhibitor structure, not G12D -- dropped for mutant consistency.
+  # NOTE: PDB 4DST was in the ensemble but carries ligand 9LI at a distinct
+  # (non-Switch-II) pocket -- dropped so the discovery ensemble is fully
+  # apo/ligand-free, not merely "not the ground-truth ligand."
+
+  # Apo baseline: first apo-like state, used as the "featureless start"
+  # reference for computing per-pocket novelty (volume absent from baseline).
+  baseline_pdb_id: "5US4"
+
+  # Ground truth is a literature-derived residue list (Switch-II pocket,
+  # McCarthy et al. / MRTX1133 SAR papers), NOT read from any structure at
+  # runtime. 7RPZ is cited here only as the PDB deposition that visualizes
+  # this site -- the code never opens 7RPZ.pdb during discovery.
+  ground_truth_pocket_pdb_id: "7RPZ"   # reference citation only, not loaded
   ground_truth_pocket_residues: ["H95", "Y96", "Q99", "V9", "D69"]
 
 ensemble:

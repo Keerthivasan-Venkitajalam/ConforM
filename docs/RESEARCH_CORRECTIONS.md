@@ -45,3 +45,42 @@
    deterministic pipeline works (master prompt rule #42). Per that explicit
    priority ordering, this pass stopped at a working, real P0 pipeline and
    did not start P1+ components; see `docs/IMPLEMENTATION_STATUS.md`.
+
+7. **Discovery-ensemble circularity: 7RPZ removed from the discovery set
+   (2026-08-25).** The original ensemble (4DST, 5US4, 7RPZ, 5XCO) included
+   7RPZ, the KRAS G12D structure co-crystallized with MRTX1133 -- the very
+   inhibitor that holds the Switch-II pocket open. Ranking candidate pockets
+   across an ensemble that already contains the ligand-forced-open state is
+   circular: it demonstrates that the pipeline can *recognize* a pocket a
+   drug has already carved out, not that it can *discover* one from
+   unliganded conformations. This would not withstand scrutiny from a
+   structural biologist reviewer.
+
+   Fix: every ensemble member was re-audited against its RCSB HETATM
+   records. The corrected discovery ensemble contains only structures whose
+   sole heteroatoms are the physiological GDP/Mg2+ cofactor plus ordinary
+   crystallographic solvent (glycerol, ethylene glycol, water, backbone
+   capping groups) -- no synthetic small-molecule ligand at any site:
+
+   | PDB  | HETATM records          | Note |
+   |------|--------------------------|------|
+   | 5US4 | GDP, GOL, HOH, MG        | apo-like |
+   | 5XCO | GDP, ACE, EDO, HOH, NH2  | apo-like (ACE/NH2 are peptide caps) |
+   | 7F0W | GDP, HOH, MG             | apo-like; Switch-I open conformation |
+   | 7EYX | GDP, HOH                 | apo-like; Mg-free |
+
+   7RPZ (MRTX1133) and 4DST (ligand 9LI at a distinct, non-Switch-II
+   pocket) were dropped from the discovery ensemble. 7RPZ is retained only
+   as the literature citation for `ground_truth_pocket_residues` -- the
+   residue list itself is hardcoded from the McCarthy et al. Switch-II SAR
+   literature, and no code path opens `7RPZ.pdb` during discovery or
+   ranking. See `configs/kras_g12d.yaml` for the annotated ensemble
+   definition and `tests/test_no_leakage.py` for the automated check that
+   ground-truth residues cannot reach a ranking function.
+
+   As a separate, independent verification that pocket detection is not an
+   artifact of the bound ligand's own volume: stripping all HETATM records
+   from 7RPZ (including MRTX1133 itself) and re-running fpocket on the bare
+   protein coordinates still recovers the cavity at 820 Å³ with H95/Y96/Q99
+   lining residues -- confirming the geometry is defined by the protein
+   backbone/side chains, not by ligand-occupied volume.

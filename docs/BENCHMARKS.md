@@ -4,51 +4,67 @@ Run with `python evaluation/ablations.py`. Results are written to
 `artifacts/ablation_report.json`. **The table below is regenerated from real
 executed runs — see that file for the authoritative current numbers.**
 
-## Results (real executed run, 2026-08-12, CPU-only)
+## Results (real executed run, 2026-08-25, CPU-only, apo-only ensemble)
+
+**⚠ Superseded numbers:** an earlier run (2026-08-12) reported 1.00 recall
+for `no-ligand-optimization`/`conform-agent`. That ensemble included PDB
+7RPZ, which is co-crystallized with MRTX1133 — the inhibitor that itself
+holds the Switch-II pocket open. That result was circular (see
+`docs/RESEARCH_CORRECTIONS.md` #7) and is retracted. The numbers below are
+from the corrected ensemble containing **only structures with no synthetic
+ligand bound anywhere** (5US4, 5XCO, 7F0W, 7EYX — verified apo-like by
+HETATM audit).
 
 ```
 mode                     states  pockets  recall  best_kcal  discovery  iters     sec
 -------------------------------------------------------------------------------------
-static                        1        9    0.00     -10.65      0.439      1      64
-random                        4       49    0.00      -8.55      0.659      1      62
-no-pocket-guidance            4       49    0.00     -10.65      0.551      1      64
-no-ligand-optimization        4       49    1.00      -9.60      0.777      1      68
-conform-agent                 4       49    1.00      -9.67      0.776      2     237
+static                        1       19    0.00      -9.85      0.384      1      58
+random                        4       47    0.20      -6.94      0.605      1      66
+no-pocket-guidance            4       47    0.00      -9.85      0.482      1      63
+no-ligand-optimization        4       47    0.40      -8.31      0.763      1      72
+conform-agent                 4       47    0.40      -9.07      0.785      2     335
 ```
 
 ### What this supports
-**Conformational sampling + crypticity-aware ranking is what finds the
-cryptic site.** Only the two modes with both (`no-ligand-optimization` and
-`conform-agent`) recover the Switch-II ground truth (recall 1.00). All three
-degraded modes score 0.00:
-- `static` has no ensemble, so the cryptic state is never sampled.
-- `no-pocket-guidance` has the ensemble but no ranking, and defaults to the
-  always-open nucleotide site.
-- `random` has the ensemble but no ranking logic, and lands on an
-  undruggable cavity (druggability 0.00).
+The ranking-guided modes (`no-ligand-optimization`, `conform-agent`) still
+outperform every ablated mode on cryptic-residue recall (0.40 vs 0.00–0.20),
+and land on the same pocket (5XCO:pocket2, 891 Å³, novelty 1.00 — fully
+absent from the apo baseline). `random` gets partial credit (0.20) by luck,
+landing on 7F0W's Switch-I-open pocket. `static` and `no-pocket-guidance`
+both land on 0.00 by defaulting to a pocket at the apo baseline itself
+(no novelty).
 
-**Raw docking score is a misleading metric, exactly as warned below.**
-`static` posts the *best* affinity in the whole table (−10.65 kcal/mol) while
-completely failing the actual task. It achieves this by docking into the
-large, always-open nucleotide pocket. Anyone comparing these systems on
-affinity alone would rank the worst method first.
+**The pocket is only partially recovered: H95 and Y96, not Q99, V9, or D69.**
+Recall 0.40 is below the `recovered_cryptic_site` threshold (0.6) — by this
+project's own criterion, **the corrected, honest ensemble does not fully
+recover the Switch-II site from apo crystal heterogeneity alone.** This is
+the expected and scientifically believable outcome: a handful of static apo
+crystal forms happen to show partial pre-organization of the pocket lip
+(consistent with a conformational-selection mechanism), but full opening to
+the ligand-bound geometry requires either (a) a ligand physically forcing it
+open — which is what the retracted run was secretly measuring — or (b)
+broader conformational sampling than 4 discrete crystal forms can provide.
+This is exactly the gap real BioEmu sampling is intended to close; see
+`docs/LIMITATIONS.md` for status.
 
-### Negative result: ligand optimization did not help
-`conform-agent` (0.776) scores **marginally lower** than
-`no-ligand-optimization` (0.777), and the optimization round improved
-affinity by only **0.07 kcal/mol** (−9.60 → −9.67) — far inside docking noise
-— at ~3.5× the runtime (237 s vs 68 s).
+**Raw docking score is still a misleading metric.** `static` posts the best
+affinity in the table (−9.85 kcal/mol) while scoring 0.00 recall — it docks
+into the large, always-open nucleotide pocket. Ranking methods by affinity
+alone would pick the worst-performing mode first, in both the old and the
+corrected results.
 
-This does **not** support the research plan's Ablation 3 expectation that
-removing iterative refinement would "demonstrate a significantly lower final
-binding affinity." On this target, with this 10-molecule library and RDKit
-R-group enumeration standing in for REINVENT 4, the optimization loop bought
-essentially nothing. Plausible reasons: the fallback optimizer only decorates
-aromatic C–H positions rather than performing reward-driven scaffold
-optimization; the seed scaffold may already be near the ceiling of what Vina
-scores in this pocket; and a single round on 12 analogs is a very small
-search. This should be re-tested with real REINVENT 4 on a GPU before any
-claim about closed-loop optimization is made.
+### Ligand optimization: small real improvement, still inconclusive
+`conform-agent` improved best affinity by **0.76 kcal/mol** over the library
+baseline (−8.31 → −9.07), a larger and more genuine gain than the 0.07
+kcal/mol noise-level change seen in the earlier (contaminated) run — but on
+a different pocket and different seed ligand (Imatinib_fragment rather than
+the piperazine scaffold), so the two results are not directly comparable.
+`conform-agent`'s Discovery Score (0.785) now exceeds
+`no-ligand-optimization` (0.763), reversing the earlier (also
+noise-level) direction. With a single run, single target, and 12 analogs,
+neither result should be treated as a validated claim that optimization
+helps — it should be re-tested with real REINVENT 4 on a GPU, and ideally
+across more than one seed ligand, before any claim is made either way.
 
 ## Modes compared
 
