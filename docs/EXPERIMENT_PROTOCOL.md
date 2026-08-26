@@ -63,3 +63,20 @@ artifacts/ablation_report.json  benchmark comparison
 
 `experiment_manifest.json` carries the reproducibility block: git commit,
 Python/NumPy/RDKit versions, platform, seeds, config path, UTC timestamp.
+
+## Reproducing the generalization tests (ABL kinase, PRMT5)
+
+```bash
+python scripts/compute_ground_truth.py data/structures/1IEP.pdb STI --chain A   # ABL DFG-out contacts
+python scripts/compute_ground_truth.py data/structures/6UXX.pdb QL1             # PRMT5 EE-loop contacts
+
+python scripts/run_experiment.py run --target abl-kinase --closed-loop
+python scripts/run_experiment.py run --target prmt5 --closed-loop
+```
+
+`tests/test_frozen_config.py` enforces that `configs/abl_kinase.yaml` and
+`configs/prmt5.yaml` share byte-identical `pocket_detection` / `docking` /
+`discovery_score` / `agent` sections with `configs/kras_g12d.yaml`, and that
+all three targets use the same ligand library — the generalization claim
+fails CI if anyone tunes a per-target weight. See
+[GENERALIZATION.md](GENERALIZATION.md) for results and interpretation.

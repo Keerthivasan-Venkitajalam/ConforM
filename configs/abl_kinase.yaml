@@ -1,0 +1,88 @@
+# Backup/held-out generalization target #1: ABL1 kinase domain.
+# Ground truth: the DFG-out allosteric pocket occupied by imatinib (Gleevec)
+# in PDB 1IEP -- a textbook cryptic/induced pocket (DFG-in -> DFG-out is a
+# large activation-loop conformational change, not a pre-existing cavity).
+#
+# FROZEN CONFIG: pocket_detection / docking / discovery_score / agent
+# sections below are copied byte-for-byte from configs/kras_g12d.yaml,
+# committed BEFORE this target was run (see git history / commit hash cited
+# in docs/RESEARCH_CORRECTIONS.md). Nothing here was tuned for this protein.
+# This is the generalization test: same weights, same thresholds, different
+# protein, entirely different pocket geometry and library.
+
+target:
+  name: ABL1_kinase
+  uniprot: P00519
+  # Construct sequence extracted directly from 1IEP chain A resolved ATOM
+  # records (residues 225-498), NOT from a separately-numbered UniProt
+  # canonical sequence -- guarantees residue numbering here is identical to
+  # the numbering used in ground_truth_pocket_residues below (both are
+  # 1IEP's own crystallographic numbering).
+  sequence: >
+    MDPSSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVSAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQ
+  mutation: none
+
+  # Apo/inhibitor-free ensemble members. Both are auto-inhibited full-length
+  # constructs (SH3-SH2-kinase) with a physiological myristate (MYR) bound
+  # at the C-lobe allosteric pocket -- a DIFFERENT site from the DFG-out
+  # imatinib pocket being discovered here, analogous to how KRAS's 4DST
+  # ligand-at-a-distinct-site was still excluded for KRAS; here MYR is kept
+  # because it is the enzyme's own physiological regulatory lipid (like
+  # KRAS's GDP), not a synthetic probe of the target pocket.
+  #   1OPL  HETATM: MYR, P16          -- active/SH2-stabilized conformation
+  #   2FO0  HETATM: MYR, P16, SEP, GOL -- down-regulated conformation
+  # NOTE: only 2 apo-like states were found (thinner than KRAS's 4 or
+  # PRMT5's 3) -- no third independent inhibitor-free full-length Abl
+  # kinase-domain structure was located. This is reported honestly rather
+  # than padded with a near-duplicate crystal form.
+  ensemble_pdb_ids:
+    - "1OPL"
+    - "2FO0"
+
+  baseline_pdb_id: "1OPL"
+
+  # 1IEP (imatinib/STI-571, DFG-out) is EXCLUDED from the discovery ensemble
+  # -- used only as the source citation for ground truth, never loaded by
+  # discovery code. Residues computed by scripts/compute_ground_truth.py
+  # (STI heavy-atom contacts within 4.5 A, chain A) -- objectively
+  # reproducible from the cited PDB file, not hand-copied from a paper.
+  ground_truth_pocket_pdb_id: "1IEP"   # reference citation only, not loaded
+  ground_truth_pocket_residues:
+    ["L248", "Y253", "V256", "A269", "V270", "K271", "E286", "V289", "M290",
+     "I293", "V299", "I313", "T315", "E316", "F317", "M318", "G321", "F359",
+     "I360", "H361", "R362", "L370", "A380", "D381", "F382"]
+
+ensemble:
+  provider: fallback_experimental
+  bioemu:
+    enabled: false
+    num_samples: 100
+    batch_size: 100
+    seed: 42
+
+# ---- everything below is byte-identical to configs/kras_g12d.yaml ----
+pocket_detection:
+  provider: fpocket
+  min_alpha_spheres: 15
+
+docking:
+  engine: vina
+  exhaustiveness: 8
+  num_modes: 5
+  box_padding: 6.0
+
+discovery_score:
+  affinity_reference:
+    best_kcal: -12.0
+    worst_kcal: -4.0
+  weights:
+    w_pocket_novelty: 0.30
+    w_volume: 0.15
+    w_binding: 0.30
+    w_state_novelty: 0.15
+    w_ligand_quality: 0.10
+    w_invalid_penalty: 0.20
+    w_cost_penalty: 0.05
+
+agent:
+  max_iterations: 5

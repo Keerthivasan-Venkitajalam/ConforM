@@ -1,0 +1,86 @@
+# Backup/held-out generalization target #2: PRMT5:MEP50, EE-loop allosteric
+# pocket. Ground truth: PDB 6UXX/6UXY (Bonday et al. 2018, JMC), where the
+# EE loop is displaced ~16.5 A to open a cryptic allosteric pocket -- one of
+# the most dramatic documented cryptic-pocket cases in the literature.
+#
+# FROZEN CONFIG: pocket_detection / docking / discovery_score / agent
+# sections below are byte-identical to configs/kras_g12d.yaml, committed
+# before this target was run. No weight or threshold was tuned for PRMT5.
+
+target:
+  name: PRMT5_MEP50
+  uniprot: O14744
+  # Construct sequence extracted directly from 6UXX chain A resolved ATOM
+  # records (residues 14-637) -- numbering matches ground_truth_pocket_residues
+  # below exactly (both from 6UXX's own crystallographic numbering).
+  sequence: >
+    VSSGRDLNCVPEIADTLGAVAKQGFDFLCMPVFHPRFKREFIQEPAKNRPGPQTRSDLLLSGRDWNTLIVGKLSPWIRPDSKVEKIRRNSEAAMLQELNFGAYLGLPAFLLPLNQEDNTNLARVLTNHIHTGHHSSMFWMRVPLVAPEDLRDDIIENAPTTHTEEYSGEEKTWMWWHNFRTLCDYSKRIAVALEIGADLPSNHVIDRWLGEPIKAAILPTSIFLTNKKGFPVLSKMHQRLIFRLLKLEVQFIITGTNHHSEKEFCSYLQYLEYLSQNRPPPNAYELFAKGYEDYLQSPVFEKDPIKYSQYQQAIYKCLLDRVPEEEKDTNVQVLMVLGAGRGPLVNASLRAAKQADRRIKLYAVEKNPNAVVTLENWQFEEWGSQVTVVSSDMREWVAPEKADIIVSELLGSFADNELSPECLDGAQHFLKDDGVSIPGEYTSFLAPISSSKLYNEVRACREKDRDPEAQFEMPYVVRLHNFHQLSAPQPCFTFSHPNRDPMIDNNRYCTLEFPVEVNTVLHGFAGYFETVLYQDITLSIRPETHSPGMFSWFPILFPIKQPITVREGQTICVRFWRCSNSKKVWYEWAVTAPVCSAIHNPTGRSYTIGL
+  mutation: none
+
+  # No fully ligand-free human PRMT5:MEP50 structure exists -- the human apo
+  # complex "has been resistant to crystallization" (per structural
+  # literature). Every human PRMT5:MEP50 crystal structure has SAM (or a SAM
+  # analog) bound in the catalytic active site, which is the enzyme's
+  # physiological cofactor (kept, analogous to KRAS's GDP). The discovery
+  # ensemble below is restricted to structures with NO ligand in the
+  # allosteric EE-loop pocket specifically (the ground-truth site):
+  #   4GQB  HETATM: 0XU (SAM analog A9145C), ACE, HOH       -- no allosteric ligand
+  #   4X61  HETATM: 3XV (active-site inhibitor), GOL, HOH, SAM -- allosteric site empty
+  #   5EML  HETATM: 5QK (active-site inhibitor), GOL, HOH, SAM -- allosteric site empty
+  # NOTE: this is a weaker apo criterion than KRAS's fully-ligand-free
+  # ensemble or ABL's MYR-only ensemble -- 4X61/5EML do carry a different
+  # (active-site, SAM-competitive) small-molecule inhibitor. Reported
+  # honestly rather than concealed; see docs/RESEARCH_CORRECTIONS.md.
+  ensemble_pdb_ids:
+    - "4GQB"
+    - "4X61"
+    - "5EML"
+
+  baseline_pdb_id: "4GQB"
+
+  # 6UXX (allosteric inhibitor Compound 1a / QL1) EXCLUDED from the
+  # discovery ensemble -- ground-truth citation only, never loaded by
+  # discovery code. Residues computed by scripts/compute_ground_truth.py
+  # (QL1 heavy-atom contacts within 4.5 A) -- independently reproduced here
+  # and matches the literature-reported contact residues (Leu436, Leu437,
+  # Phe519, Phe555, Tyr468, Glu444) as a cross-check.
+  ground_truth_pocket_pdb_id: "6UXX"   # reference citation only, not loaded
+  ground_truth_pocket_residues:
+    ["L436", "L437", "N443", "E444", "S446", "Y468", "S470", "F471", "L472",
+     "C518", "F519", "G553", "Y554", "F555", "I567", "F580", "I582", "F584",
+     "F602", "Y613"]
+
+ensemble:
+  provider: fallback_experimental
+  bioemu:
+    enabled: false
+    num_samples: 100
+    batch_size: 100
+    seed: 42
+
+# ---- everything below is byte-identical to configs/kras_g12d.yaml ----
+pocket_detection:
+  provider: fpocket
+  min_alpha_spheres: 15
+
+docking:
+  engine: vina
+  exhaustiveness: 8
+  num_modes: 5
+  box_padding: 6.0
+
+discovery_score:
+  affinity_reference:
+    best_kcal: -12.0
+    worst_kcal: -4.0
+  weights:
+    w_pocket_novelty: 0.30
+    w_volume: 0.15
+    w_binding: 0.30
+    w_state_novelty: 0.15
+    w_ligand_quality: 0.10
+    w_invalid_penalty: 0.20
+    w_cost_penalty: 0.05
+
+agent:
+  max_iterations: 5

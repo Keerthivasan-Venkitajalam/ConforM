@@ -77,6 +77,20 @@ exactly the job real BioEmu generative sampling is intended to do — see
 > only and also selected the nucleotide site. Crypticity had to be *in the
 > objective* for the system to work. See [docs/SCIENTIFIC_METHOD.md](docs/SCIENTIFIC_METHOD.md).
 
+## Generalization: does it only work on KRAS?
+
+The frozen KRAS pocket-ranking config (identical weights, thresholds, and
+ligand library, no per-target tuning — enforced by
+[tests/test_frozen_config.py](tests/test_frozen_config.py)) was pointed at
+two proteins never used during development: **ABL1 kinase** (DFG-out/
+imatinib pocket) and **PRMT5:MEP50** (EE-loop allosteric pocket). On ABL
+kinase it produced a **documented negative result** — the ensemble was too
+thin (2 apo structures) for the novelty signal to be meaningful, and the
+policy correctly refused to dock into the resulting low-quality pocket
+rather than fabricate a positive outcome. Full writeup, including exactly
+why it failed and what that reveals about the method's requirements, in
+[docs/GENERALIZATION.md](docs/GENERALIZATION.md).
+
 ## Quick start
 
 ```bash
@@ -92,6 +106,8 @@ Individual commands:
 
 ```bash
 python scripts/run_experiment.py run --target kras-g12d --closed-loop
+python scripts/run_experiment.py run --target abl-kinase --closed-loop   # generalization test
+python scripts/run_experiment.py run --target prmt5 --closed-loop        # generalization test
 python scripts/run_experiment.py benchmark --target kras-g12d
 python scripts/run_experiment.py ablate --mode static
 python scripts/run_experiment.py report

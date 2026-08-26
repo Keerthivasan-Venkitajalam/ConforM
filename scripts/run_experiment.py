@@ -21,7 +21,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-TARGETS = {"kras-g12d": Path("configs/kras_g12d.yaml")}
+TARGETS = {
+    "kras-g12d": Path("configs/kras_g12d.yaml"),
+    "abl-kinase": Path("configs/abl_kinase.yaml"),
+    "prmt5": Path("configs/prmt5.yaml"),
+}
+# Deliberately the SAME ligand library for every target -- using a
+# target-specific library would undermine the zero-shot/generalization
+# claim (see docs/SCIENTIFIC_METHOD.md). The library and every scoring
+# weight are frozen before any non-KRAS target is run.
 DEFAULT_LIGANDS = Path("data/ligands_kras.csv")
 
 REQUIRED_BINARIES = ["fpocket", "obabel"]
