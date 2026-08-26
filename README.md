@@ -83,12 +83,17 @@ The frozen KRAS pocket-ranking config (identical weights, thresholds, and
 ligand library, no per-target tuning — enforced by
 [tests/test_frozen_config.py](tests/test_frozen_config.py)) was pointed at
 two proteins never used during development: **ABL1 kinase** (DFG-out/
-imatinib pocket) and **PRMT5:MEP50** (EE-loop allosteric pocket). On ABL
-kinase it produced a **documented negative result** — the ensemble was too
-thin (2 apo structures) for the novelty signal to be meaningful, and the
-policy correctly refused to dock into the resulting low-quality pocket
-rather than fabricate a positive outcome. Full writeup, including exactly
-why it failed and what that reveals about the method's requirements, in
+imatinib pocket) and **PRMT5:MEP50** (EE-loop allosteric pocket).
+
+| Target | Recall | Outcome |
+|---|---|---|
+| KRAS G12D | 0.40 | Partial recovery; beats all ablated baselines |
+| ABL1 kinase | 0.00 | **Documented negative result** — 2-structure ensemble too thin for the novelty signal to be meaningful; agent correctly refused to dock rather than fabricate a result |
+| PRMT5:MEP50 | 0.25 | Real partial recovery on a structurally unrelated fold (druggability 0.998, best Discovery Score 0.735) |
+
+Consistent partial signal, an honest failure mode instead of a fabricated
+success, and zero per-target tuning across three unrelated protein folds —
+full writeup, root-cause analysis, and per-target manifests in
 [docs/GENERALIZATION.md](docs/GENERALIZATION.md).
 
 ## Quick start

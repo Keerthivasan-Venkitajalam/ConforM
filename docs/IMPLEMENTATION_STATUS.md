@@ -64,8 +64,11 @@ with no synthetic ligand bound anywhere.
 - Docking is Vina empirical scoring, unvalidated against CNN or experimental data.
 - `docker-compose.yml` and the Dockerfile are written but were never built.
 - **Generalization (2026-08-26):** the frozen KRAS config, run unmodified on
-  ABL kinase, produced a documented negative result — the 2-structure apo
-  ensemble was too thin for the novelty signal to be meaningful, and the
-  agent correctly stopped rather than dock into a spurious pocket. See
-  [GENERALIZATION.md](GENERALIZATION.md). PRMT5 run in progress/pending at
-  time of writing.
+  two held-out targets. ABL kinase produced a documented negative result —
+  the 2-structure apo ensemble was too thin for the novelty signal to be
+  meaningful, and the agent correctly stopped rather than dock into a
+  spurious pocket. PRMT5:MEP50 (a structurally unrelated methyltransferase)
+  produced a real partial recovery: druggability 0.998, 25% ground-truth
+  residue overlap (5/20, including the two most literature-emphasized
+  EE-loop residues), best Discovery Score 0.735. Full writeup and the
+  three-target summary table in [GENERALIZATION.md](GENERALIZATION.md).
