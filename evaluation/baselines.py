@@ -78,7 +78,18 @@ def run_simple_mode(mode: str, config_path: Path, ligand_csv: Path, out_root: Pa
 
     if mode == "static":
         # Only the apo baseline structure: no conformational sampling at all.
-        sub_cfg = {**cfg, "target": {**cfg["target"], "ensemble_pdb_ids": [baseline_id]}}
+        # Must also force bioemu off, not just override ensemble_pdb_ids --
+        # ensemble_pdb_ids only feeds the ExperimentalEnsembleProvider fallback,
+        # and get_ensemble() tries BioEmu first whenever ensemble.bioemu.enabled
+        # is true, which it inherits from cfg. Without this, "static" silently
+        # samples the full real BioEmu ensemble like every other mode, defeating
+        # the entire point of a no-sampling control (see RESEARCH_CORRECTIONS.md).
+        sub_cfg = {
+            **cfg,
+            "target": {**cfg["target"], "ensemble_pdb_ids": [baseline_id]},
+            "ensemble": {**cfg["ensemble"],
+                         "bioemu": {**cfg["ensemble"].get("bioemu", {}), "enabled": False}},
+        }
         ens = engines.generate_ensemble(sub_cfg, dirs["structures"])
         event(f"STATIC baseline: single structure {baseline_id}, no ensemble generated")
     else:

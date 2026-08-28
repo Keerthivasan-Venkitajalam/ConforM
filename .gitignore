@@ -1,9 +1,15 @@
 artifacts/
-data/structures/*.pdb
+data/structures/
 __pycache__/
 *.pyc
 .pytest_cache/
 *.db
+
+# GPU session artifacts -- never commit: gnina is a ~2GB third-party binary
+# (downloadable per scripts/gpu_session.sh), and session tarballs duplicate
+# what's already gitignored under artifacts/.
+/gnina
+conform_gpu_session_*.tar.gz
 
 # Private reference documents — never commit
 *.txt

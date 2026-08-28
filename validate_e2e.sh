@@ -53,6 +53,11 @@ assert a.rmsd_matrix.max() > 0 and len(a.common_resids) > 50
 check "Pocket detection"  $PY -c "
 from pathlib import Path
 from tools.mdpocket_tool import run_fpocket
+from tools.structure_tool import StructureProvider
+# 7RPZ is used only as a convenient single test structure for this fpocket
+# smoke check -- NOT part of the discovery ensemble (see RESEARCH_CORRECTIONS.md
+# #7). Fetch it if a fresh clone/environment doesn't already have it cached.
+StructureProvider().get_baseline('7RPZ', Path('data/structures'))
 p = run_fpocket(Path('data/structures/7RPZ.pdb'), Path('artifacts/_e2e_pockets'))
 assert len(p) > 0 and p[0].volume > 0
 "

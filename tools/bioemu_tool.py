@@ -110,12 +110,21 @@ class BioEmuProvider:
 
         # bioemu.sample writes samples.xtc + topology.pdb (multi-frame trajectory)
         # and/or per-frame PDBs depending on version; collect whatever it produced.
-        pdb_files = sorted(out_dir.glob("*.pdb"))
         frame_files = sorted(out_dir.glob("frame_*.pdb")) or sorted(out_dir.glob("samples_*.pdb"))
-        structures = frame_files or pdb_files
+        traj_path = out_dir / "samples.xtc"
+        topology_path = out_dir / "topology.pdb"
+        if frame_files:
+            structures = frame_files
+        elif traj_path.exists() and topology_path.exists():
+            # Trajectory-format output: topology.pdb alone is just the reference
+            # frame, NOT the ensemble -- the real samples live in samples.xtc and
+            # must be split into per-frame PDBs, or every state collapses to 1.
+            structures = self._extract_frames(traj_path, topology_path, out_dir)
+        else:
+            structures = sorted(out_dir.glob("*.pdb"))
         if not structures:
             raise RuntimeError(
-                f"BioEmu ran but produced no PDB output in {out_dir}; check "
+                f"BioEmu ran but produced no usable structures in {out_dir}; check "
                 f"samples.xtc/topology.pdb for trajectory-format output requiring "
                 f"MDAnalysis extraction to per-frame PDBs."
             )
@@ -139,6 +148,21 @@ class BioEmuProvider:
                 ),
             },
         )
+
+    @staticmethod
+    def _extract_frames(traj_path: Path, topology_path: Path, out_dir: Path) -> list[Path]:
+        """Split a samples.xtc + topology.pdb trajectory into per-frame PDBs."""
+        import MDAnalysis as mda
+
+        frames_dir = out_dir / "frames"
+        frames_dir.mkdir(exist_ok=True)
+        universe = mda.Universe(str(topology_path), str(traj_path))
+        frame_paths = []
+        for i, _ in enumerate(universe.trajectory):
+            frame_path = frames_dir / f"frame_{i:04d}.pdb"
+            universe.atoms.write(str(frame_path))
+            frame_paths.append(frame_path)
+        return frame_paths
 
 
 class ExperimentalEnsembleProvider:

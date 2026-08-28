@@ -84,3 +84,105 @@
    protein coordinates still recovers the cavity at 820 Å³ with H95/Y96/Q99
    lining residues -- confirming the geometry is defined by the protein
    backbone/side chains, not by ligand-occupied volume.
+
+8. **First real GPU/BioEmu run initially reported a false `n_states=1`
+   result for every ablation mode -- retracted and re-verified
+   (2026-08-29).** A GPU session on this project's own RTX 4060 (WSL2,
+   `nvidia-smi` confirmed live) produced an ablation table where every
+   mode, including `conform-agent`, showed `n_states=1` and `conform-agent`
+   scored ground-truth recall 0.80 -- suspicious for a `num_samples=100`
+   BioEmu request. That number was never published anywhere and was caught
+   before use. Root cause, fully traced:
+
+   - **`tools/bioemu_tool.py`, `BioEmuProvider.generate()`.** Real BioEmu
+     inference genuinely ran on real CUDA (34 batch `.npz` files plus a
+     `samples.xtc` trajectory were on disk, ~100 real GPU-generated
+     conformers). But the code only collected structures via
+     `out_dir.glob("*.pdb")` / `frame_*.pdb` / `samples_*.pdb` -- none of
+     which match BioEmu's `samples.xtc` + `topology.pdb` trajectory output
+     format. Only `topology.pdb` (the single reference frame) matched, so
+     the entire real ensemble was silently discarded and every downstream
+     step (pocket detection, ranking, docking) ran against 1 structure
+     while believing it had sampled 100. Fixed by extracting per-frame
+     PDBs from the trajectory via MDAnalysis (`_extract_frames`), covered
+     by `tests/test_bioemu_frame_extraction.py`, which fails if this
+     regresses.
+   - **`agent/loop_controller.py`, `build_manifest()`/`provenance()`.**
+     `"cuda": "unavailable (no nvidia-smi on this host)"` and the entire
+     `tools_unavailable_fallback_used` dict were hardcoded string literals
+     written into every manifest unconditionally, left over from before
+     GPU support existed. They directly contradicted the real `.npz`/`.xtc`
+     evidence sitting in the same experiment directory. Fixed: `cuda` now
+     reflects a live `cuda_available()` check, and
+     `tools_unavailable_fallback_used` only reports a tool as "fallback
+     used" if this specific run's own state shows it actually fell back
+     (`BioEmu` only appears if `ensemble_provider != "bioemu"`; `REINVENT4`
+     only if `optimizer_mode != "reinvent4"`). `GNINA`/`OpenFold3`/
+     `DiffDock-Pocket` were removed from this per-run dict entirely --
+     `loop_controller.py`'s closed loop never invokes any of the three
+     (confirmed against its own `tools_executed` list), so claiming a
+     fallback for tools never attempted was misleading regardless of GPU
+     status.
+   - **`evaluation/baselines.py`, `static` mode.** A third, independent bug
+     surfaced once the first two were fixed and the ablation table was
+     re-run: the `static` baseline (meant to be "single apo structure, no
+     conformational sampling at all" -- the naive control) only overrode
+     `target.ensemble_pdb_ids`, which feeds the *fallback* ensemble
+     provider. It never set `ensemble.bioemu.enabled = False`, and
+     `get_ensemble()` tries BioEmu first whenever that flag is true
+     (inherited unchanged from the main config). So with real BioEmu
+     enabled, `static` silently sampled the same full ~100-state ensemble
+     as every other mode and then ran through the exact same
+     `rank_pocket_families()` ranking as `conform-agent` -- defeating the
+     entire purpose of a no-sampling control. This is why the first
+     corrected table still showed `static` tied with the real pipeline at
+     0.80 recall. Fixed by explicitly forcing
+     `ensemble.bioemu.enabled = False` in `static`'s sub-config.
+
+   **Verified real result** (`kras_g12d_conform-agent_1787945235`,
+   git commit at run time `753753f`, re-run after both fixes): real BioEmu
+   inference, **99 real states**, `is_equilibrium_sample=True`, max RMSF
+   5.00 Å, max pairwise RMSD 4.89 Å, PC1 explained variance 0.199 (all
+   0.0 in the false run). Ground-truth pocket residue recall **0.60**,
+   best Discovery Score 0.7194. GNINA CNN rescoring, run for the first time
+   against a real, verified pocket/ligand set, produced real CNNscore/
+   CNNaffinity values (top hit `Imatinib_fragment_F_0`: CNNscore 0.683,
+   CNNaffinity 6.654) -- see `docs/IMPLEMENTATION_STATUS.md`.
+
+   **Corrected 5-mode ablation table** (all real BioEmu runs, one flagship
+   `static` re-run after its fix, four other modes' original real runs
+   reused unchanged since that bug did not affect them):
+
+   | mode | states | pockets | recall | best kcal | discovery | iters | sec |
+   |---|---|---|---|---|---|---|---|
+   | static | 1 | 19 | 0.00 | -9.81 | 0.383 | 1 | 48 |
+   | random | 99 | 1192 | 0.00 | -6.85 | 0.595 | 1 | 526 |
+   | no-pocket-guidance | 98 | 1210 | 0.00 | -7.90 | 0.628 | 1 | 519 |
+   | no-ligand-optimization | 100 | 1225 | 0.80 | -9.41 | 0.781 | 1 | 531 |
+   | conform-agent | 94 | 1185 | 0.60 | -9.07 | 0.756 | 2 | 767 |
+
+   **Honest caveat this run surfaced, reported rather than hidden:**
+   `no-ligand-optimization` and `conform-agent` run the *identical* pocket
+   selection algorithm (`rank_pocket_families`), yet scored 0.80 vs. 0.60.
+   Because each mode draws its **own independent** BioEmu sample rather
+   than sharing one ensemble, that 0.20 gap is more likely sampling
+   variance between two separate real diffusion draws than a real effect
+   of the optimization step -- pocket selection happens in iteration 0,
+   before the optimization branch is even reached, so optimization cannot
+   causally change which pocket gets picked. Weak supporting evidence: an
+   earlier standalone `conform-agent` run
+   (`kras_g12d_conform-agent_1787945235`, the one GNINA-rescored above)
+   independently landed on the same 0.60 recall -- two of two
+   `conform-agent` draws at 0.60 vs. one `no-ligand-optimization` draw at
+   0.80 -- but n=2 is far too small to separate a real effect from noise.
+   The clean, *within-run* evidence for the optimization step is instead
+   `conform-agent`'s own before/after: best library affinity -8.75 kcal/mol
+   -> best analog -9.07 kcal/mol (delta -0.32 kcal/mol, 12 analogs
+   generated and re-docked). A statistically meaningful cross-mode
+   ablation would need multiple BioEmu seeds per mode; that was not
+   feasible in the remaining compute/time budget and is recorded here as a
+   known limitation rather than glossed over -- see
+   `docs/GENERALIZATION.md` for how this interacts with the earlier
+   CPU-fallback three-target generalization result, which used a
+   different, non-stochastic ensemble source and is not affected by this
+   issue.

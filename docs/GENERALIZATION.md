@@ -124,6 +124,36 @@ is too thin. That pattern — consistent partial signal, honest failure mode,
 no cherry-picking — is a stronger answer to "did you tune this for KRAS?"
 than a second perfect score would have been.
 
+## Addendum: real BioEmu ensemble on KRAS G12D (GPU-verified, 2026-08-29)
+
+The three-target comparison above intentionally uses the **same** ensemble
+source (the CPU-only experimental-fallback provider) across all three
+targets, so the comparison stays apples-to-apples with zero per-target
+tuning. It is **not** updated with the result below, which used a different
+ensemble source (real BioEmu, GPU-only, KRAS-only) and would break that
+apples-to-apples basis if merged in. It is reported here as a separate,
+additional data point instead.
+
+On a real CUDA GPU (RTX 4060, WSL2), `tools/bioemu_tool.py` ran genuine
+BioEmu diffusion-model inference from the apo KRAS G12D sequence alone (no
+crystal structure as input): 99 real equilibrium-sampled states, replacing
+KRAS's 4-structure CPU fallback ensemble. Ground-truth Switch-II recall rose
+from **0.40** (4-structure CPU fallback) to **0.60** (99-state real BioEmu,
+replicated independently across two separate runs) — the improvement this
+document's own "why it failed" analysis for ABL kinase predicted a real
+generative ensemble should produce, since novelty-based ranking needs enough
+states for "found in 1 of N" to be a meaningful rarity signal rather than a
+near-coin-flip. Full verification trail, including two bugs this run caught
+before the result was ever reported anywhere (a trajectory-extraction bug
+that first silently collapsed the ensemble to 1 state, and a stale hardcoded
+manifest field), is in
+[RESEARCH_CORRECTIONS.md](RESEARCH_CORRECTIONS.md) #8.
+
+This does not extend to ABL kinase or PRMT5:MEP50 -- real BioEmu was only
+run for KRAS G12D in the time available. Whether a real generative ensemble
+would similarly rescue ABL kinase's 0.00-recall thin-ensemble failure mode
+is the natural next experiment, not yet run.
+
 ## What this section is for
 
 Not to claim the method "works on any target" — it demonstrably does not

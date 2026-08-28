@@ -27,6 +27,7 @@ from agent.state import Action, ExperimentState, action_hash
 from db.repository import Repository
 from pipelines import engines
 from tools import reinvent_tool
+from tools.bioemu_tool import cuda_available
 
 # Actions that constitute a real closed-loop experiment cycle (they consume
 # significant compute and produce new ligand evidence). Setup stages do not
@@ -361,14 +362,20 @@ class ClosedLoopAgent:
             "runtime_seconds": round(runtime, 1),
             "compute_budget_seconds": self.state.budget_seconds,
             "tools_executed": ["RDKit", "fpocket 4.0", "AutoDock Vina 1.2.7", "MDAnalysis", "OpenBabel 3.1.0"],
-            "tools_unavailable_fallback_used": {
-                "BioEmu": "no CUDA GPU; real experimental PDB ensemble used instead",
-                "OpenFold3": "no CUDA GPU; RCSB-deposited structures used instead",
-                "GNINA": "CUDA CNN backend unavailable; Vina empirical scoring used",
-                "DiffDock-Pocket": "GPU diffusion model unavailable; not run",
-                "REINVENT4": f"not installed; optimizer fallback used: {self.optimizer_mode}",
-            },
+            "tools_unavailable_fallback_used": self._fallbacks_used(),
         }
+
+    def _fallbacks_used(self) -> dict:
+        """Only report a fallback for a tool this run actually invoked and that
+        actually fell back -- do not claim a tool "was used instead" of one this
+        closed loop never attempted to call."""
+        fallbacks = {}
+        if self.state.ensemble_provider and self.state.ensemble_provider != "bioemu":
+            reason = "no CUDA GPU detected" if not cuda_available() else "BioEmu unavailable"
+            fallbacks["BioEmu"] = f"{reason}; {self.state.ensemble_provider} used instead"
+        if self.optimizer_mode and self.optimizer_mode != "reinvent4":
+            fallbacks["REINVENT4"] = f"not installed; optimizer fallback used: {self.optimizer_mode}"
+        return fallbacks
 
     def provenance(self) -> dict:
         try:
@@ -384,7 +391,7 @@ class ClosedLoopAgent:
             "platform": platform.platform(),
             "numpy": numpy.__version__,
             "rdkit": rdkit.__version__,
-            "cuda": "unavailable (no nvidia-smi on this host)",
+            "cuda": "available" if cuda_available() else "unavailable (no nvidia-smi on this host)",
             "random_seeds": {"vina": 42, "rdkit_embed": 42},
             "config_file": str(self.config_path),
             "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

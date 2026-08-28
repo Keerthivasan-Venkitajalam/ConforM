@@ -29,6 +29,10 @@ target:
   # EXCLUDED from the ensemble. 7RPZ is used exclusively as post-hoc ground
   # truth for scoring recall -- see ground_truth_pocket_residues below -- and
   # is never passed to structure/ensemble/pocket-detection code.
+  #
+  # NOTE: this ensemble_pdb_ids list is only consulted by the fallback
+  # ExperimentalEnsembleProvider path (see ensemble.bioemu.enabled below) --
+  # it plays no role when real BioEmu inference runs.
   ensemble_pdb_ids:
     - "5US4"   # KRAS G12D, GDP-bound, apo-like (no synthetic ligand)
     - "5XCO"   # KRAS G12D, GDP-bound, apo-like (no synthetic ligand)
@@ -53,9 +57,15 @@ target:
   ground_truth_pocket_residues: ["H95", "Y96", "Q99", "V9", "D69"]
 
 ensemble:
-  provider: fallback_experimental   # bioemu | fallback_experimental
+  provider: bioemu   # bioemu | fallback_experimental
   bioemu:
-    enabled: false   # no GPU available in this environment -- see docs/LIMITATIONS.md
+    # Real BioEmu diffusion inference, verified live on an RTX 4060 via WSL2
+    # (2026-08-29, see docs/RESEARCH_CORRECTIONS.md #8). get_ensemble()
+    # gracefully falls back to ExperimentalEnsembleProvider (the 4-structure
+    # experimental ensemble above) whenever no CUDA GPU is detected, so this
+    # stays true as the checked-in default without breaking CPU-only
+    # reproduction -- see docs/IMPLEMENTATION_STATUS.md.
+    enabled: true
     num_samples: 100
     batch_size: 100
     seed: 42

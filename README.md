@@ -19,10 +19,15 @@ demonstrate that any molecule binds KRAS G12D.
 - Recovering the Switch-II pocket is **known ground-truth recovery**, which
   validates the method. It is **not** a novel biological discovery: that
   pocket is well characterized and already drugged (MRTX1133).
-- Several models from the original design (BioEmu, OpenFold3, GNINA,
-  DiffDock-Pocket, REINVENT 4) **could not be executed on this CPU-only
-  machine**. Documented fallbacks were used and are labeled as such in every
-  manifest, report, and dashboard view. See [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+- The core pipeline is CPU-only and reproducible without a GPU. Two of the
+  originally GPU-only models, **BioEmu and GNINA, have since been executed
+  for real** on a CUDA machine (2026-08-29) — see the GPU-verified result
+  below and [docs/RESEARCH_CORRECTIONS.md](docs/RESEARCH_CORRECTIONS.md) #8,
+  which also documents two bugs that first produced a false GPU result and
+  were caught before being reported anywhere. **OpenFold3, DiffDock-Pocket,
+  and REINVENT 4 still have not been run**; documented fallbacks are used
+  for those and labeled as such in every manifest, report, and dashboard
+  view. See [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ---
 
@@ -31,13 +36,13 @@ demonstrate that any molecule binds KRAS G12D.
 ```
 KRAS G12D
    ↓  structure acquisition        (OpenFold3 → ESMFold → RCSB)      [RCSB used]
-   ↓  conformational ensemble      (BioEmu → experimental ensemble)  [experimental used]
+   ↓  conformational ensemble      (BioEmu → experimental ensemble)  [BioEmu verified on GPU; experimental fallback on CPU]
    ↓  structural analysis          RMSD / RMSF / PCA
    ↓  pocket detection             (mdpocket → fpocket → P2Rank)     [fpocket used]
    ↓  cross-state pocket families  persistence + novelty vs. apo baseline
    ↓  blind pocket ranking         druggability + novelty + volume
    ↓  ligand validation            RDKit sanitize / 3D embed / Lipinski / QED
-   ↓  docking                      (GNINA → Vina)                    [Vina used]
+   ↓  docking                      (Vina, GNINA CNN rescore on top)  [Vina always; GNINA verified on GPU]
    ↓  Discovery Score              deterministic Python, never LLM-generated
    ↓  agent decision               screen? optimize? stop?
    ↺  next experiment
@@ -48,18 +53,42 @@ The agent decides what to run next from an explicit state machine
 pipeline. Scientific engines are independently callable without any agent or
 LLM.
 
-## Key result (real executed run, apo-only ensemble)
+## Key result (real GPU-verified run, real BioEmu ensemble, 2026-08-29)
 
-Blind ranking — with ground-truth overlap explicitly **excluded** from the
-objective — selects a cavity that is:
+On a real CUDA GPU, `tools/bioemu_tool.py` ran genuine BioEmu diffusion
+inference from the apo KRAS G12D sequence alone — no experimental structure
+as input. Blind ranking — with ground-truth overlap explicitly **excluded**
+from the objective — selects a cavity that is:
 
-- **absent from the apo baseline structure** (novelty 1.00, baseline volume 0 Å³)
-- **present in only 1 of 4 sampled states** (persistence 0.25 — genuinely transient)
-- **partially covering the documented Switch-II ground-truth residues** (H95, Y96 recovered; Q99, V9, D69 not — recall 0.40)
+- **absent from the apo baseline structure** (novelty 1.00)
+- **present in only a handful of a 94–100-state real equilibrium sample**
+  (persistence 0.04–0.16 — genuinely transient, not a coin flip the way a
+  4-structure ensemble risks being)
+- **covering 60% of the documented Switch-II ground-truth residues**
+  (replicated independently across two separate BioEmu runs)
 
-The `static` baseline, given only the apo structure, instead selects the
-always-open nucleotide site: ground-truth recall **0.00**. This is the
-central experimental claim, and it is reproducible with `./validate_e2e.sh`.
+Full corrected 5-mode ablation table (static / random / no-pocket-guidance /
+no-ligand-optimization / conform-agent, all real BioEmu runs) and the honest
+caveat about cross-mode sampling variance in
+[docs/RESEARCH_CORRECTIONS.md](docs/RESEARCH_CORRECTIONS.md) #8. GNINA CNN
+rescoring was also run for real on this verified result (top hit CNNscore
+0.683).
+
+**This supersedes an earlier false GPU result** (`n_states=1` for every
+mode, a `conform-agent` recall of 0.80) that was caught and retracted before
+being used anywhere — a trajectory-extraction bug silently discarded ~99 of
+100 real BioEmu samples down to 1 reference frame. Full root-cause writeup
+in RESEARCH_CORRECTIONS.md #8.
+
+## Earlier result (CPU-only, no GPU required, apo-only crystal ensemble)
+
+Kept as a separately valid, no-GPU-required reproduction path — this is what
+`./validate_e2e.sh` exercises. Blind ranking on 4 real KRAS G12D crystal
+structures selects a cavity **partially covering the documented Switch-II
+ground-truth residues** (H95, Y96 recovered; Q99, V9, D69 not — recall
+0.40), present in only 1 of 4 sampled states (persistence 0.25). The
+`static` baseline, given only the apo structure, instead selects the
+always-open nucleotide site: ground-truth recall **0.00**.
 
 **This is a partial, honest result, not a clean win.** An earlier ensemble
 that included the MRTX1133-bound structure (7RPZ) reported 100% recovery —
@@ -70,7 +99,7 @@ removed and the ensemble restricted to structures with no synthetic ligand
 bound anywhere, the ranking-guided modes still clearly outperform every
 ablated baseline (0.40 recall vs. 0.00–0.20), but do not fully recover the
 site from static apo crystal heterogeneity alone. Closing that gap is
-exactly the job real BioEmu generative sampling is intended to do — see
+exactly what the GPU-verified real BioEmu result above does — see
 [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 > Design note: the first version of this ranking used druggability + volume
@@ -133,9 +162,18 @@ real report generation.
 
 ## Requirements
 
-**No GPU required.** Everything currently implemented runs on CPU. A full
-KRAS closed-loop run takes ~4 minutes on a laptop. BioEmu / OpenFold3 /
-GNINA / DiffDock-Pocket / REINVENT 4 would each need CUDA; the provider
+**No GPU required for the core pipeline.** Everything in `./validate_e2e.sh`
+runs on CPU; a full KRAS closed-loop run takes ~4 minutes on a laptop with
+the CPU-only experimental-ensemble fallback (`bioemu.enabled: false`, or no
+CUDA GPU detected).
+
+**A GPU unlocks the real BioEmu and GNINA path** (`bioemu.enabled: true` in
+`configs/kras_g12d.yaml`, plus `scripts/gnina_rescore.py`) — verified for
+real on an RTX 4060 via WSL2, see the GPU-verified result above and
+[scripts/gpu_session.sh](scripts/gpu_session.sh) for a scripted end-to-end
+GPU session. A single closed-loop run with real BioEmu (100 samples) plus
+GNINA rescoring takes ~13 minutes. OpenFold3, DiffDock-Pocket, and
+REINVENT 4 would also each need CUDA and have not been run; the provider
 interfaces for them exist and are documented in
 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
@@ -150,9 +188,10 @@ evaluation/     metrics · baselines · ablations · cryptic_recovery
 visualization/  dashboard.py (Streamlit) · molecular_viewer.py (py3Dmol) · plots.py (SVG)
 scripts/        run_experiment.py (CLI) · generate_report.py
 configs/        kras_g12d.yaml
-tests/          34 tests
+tests/          49 tests
 docs/           ARCHITECTURE · SCIENTIFIC_METHOD · EXPERIMENT_PROTOCOL · BENCHMARKS
                 LIMITATIONS · RESEARCH_CORRECTIONS · DEPENDENCIES · IMPLEMENTATION_STATUS
+                GENERALIZATION
 ```
 
 ## Documentation
@@ -167,6 +206,7 @@ docs/           ARCHITECTURE · SCIENTIFIC_METHOD · EXPERIMENT_PROTOCOL · BENC
 | [RESEARCH_CORRECTIONS.md](docs/RESEARCH_CORRECTIONS.md) | Where the original plan was wrong or infeasible |
 | [DEPENDENCIES.md](docs/DEPENDENCIES.md) | Versions, licenses, GPU-worker isolation strategy |
 | [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) | Component-by-component status table |
+| [GENERALIZATION.md](docs/GENERALIZATION.md) | Zero-shot evaluation on ABL1 kinase and PRMT5:MEP50; real-BioEmu KRAS addendum |
 
 ## Licenses
 
