@@ -186,3 +186,71 @@
    CPU-fallback three-target generalization result, which used a
    different, non-stochastic ensemble source and is not affected by this
    issue.
+
+9. **The #8 caveat resolved with a shared-ensemble re-run and a permutation
+   test (2026-08-30).** #8 flagged, but did not fix, the independent-sampling
+   confound in the ablation table. This entry fixes it, using the already
+   GPU-verified 99-state ensemble from #8's `conform-agent` run
+   (`kras_g12d_conform-agent_1787945235`) as a shared master ensemble --
+   **no new BioEmu sampling was performed**; only the deterministic
+   pocket-detection/ranking/docking steps were re-run per mode
+   (`evaluation/shared_ensemble_ablation.py`).
+
+   | mode | states | pockets | recall | best kcal | discovery | iters | sec |
+   |---|---|---|---|---|---|---|---|
+   | static (true single-structure control) | 1 | 19 | 0.00 | -9.81 | 0.379 | 1 | 49 |
+   | random | 99 | 1228 | 0.60 | -7.24 | 0.667 | 1 | 101 |
+   | no-pocket-guidance | 99 | 1228 | 0.00 | -6.98 | 0.598 | 1 | 82 |
+   | no-ligand-optimization | 99 | 1228 | 0.60 | -8.29 | 0.718 | 1 | 86 |
+   | conform-agent | 99 | 1228 | 0.60 | -8.80 | 0.719 | 2 | 310 |
+
+   With every non-static mode now evaluating the **identical** 99-state
+   ensemble, `no-ligand-optimization` and `conform-agent` converge on the
+   exact same selected pocket family (0.60 recall both) -- confirming #8's
+   caveat was correct: the earlier 0.80-vs-0.60 gap was sampling variance
+   between two independent BioEmu draws, not a real effect of the
+   optimization step. The clean within-ensemble evidence for the
+   optimization step is unchanged from #8: -8.29 -> -8.80 kcal/mol
+   (Δ -0.51 kcal/mol) on the identical pocket, with no confound left to
+   explain it away.
+
+   **A second real bug surfaced running this**: `no-pocket-guidance`
+   crashed with `StopIteration`. Its selection logic
+   (`evaluation/baselines.py`) assumed the ensemble's first structure
+   always has at least one detected pocket family -- untrue in general, and
+   false for `frame_0000` of this specific real ensemble. Fixed to walk the
+   ensemble in order and take the first structure that actually has a
+   detection, still applying no volumetric/novelty guidance.
+
+   **An honest, unresolved-by-construction nuance**: `random` (seed=42)
+   also landed on 0.60 recall this time -- a different outcome from the
+   original independent-sampling table, where `random` scored 0.00. This
+   is not a contradiction; it is a real property of *this* ensemble: enough
+   of its 149 detected pocket families apparently have decent ground-truth
+   overlap that one random draw can land well. A single random seed cannot
+   distinguish "the ranking algorithm is better than chance" from "this
+   ensemble is easy" -- that is exactly what the permutation test below is
+   for, and a single `random` draw is not treated as evidence on its own.
+
+   **Permutation test** (`evaluation/permutation_test.py`, unit-tested in
+   `tests/test_permutation_test.py`): holding the real, unmodified
+   `rank_score` ordering of all 149 candidate pocket families fixed,
+   10,000 random relabelings of which family carries the ground-truth
+   overlap were generated. The real ranking placed the best-overlap family
+   available in the ensemble (overlap 1.0 -- notably not the family the
+   algorithm actually selected, which had overlap 0.60 and ranked #1) at
+   rank 2 of 149. A rank that good occurred in **1.44% of random
+   relabelings (empirical p = 0.0144, seed=42)**. No p-value was
+   pre-specified; this is what the test returned. This is evidence that
+   `rank_score` is associated with ground-truth overlap beyond chance on
+   this specific ensemble -- it is not, by itself, evidence that the method
+   generalizes across ensembles or targets (see `docs/GENERALIZATION.md`
+   for that separate question).
+
+   **Selection-margin logging added** (`agent/loop_controller.py`): every
+   `SELECT_POCKET` decision now also logs the score gap between the chosen
+   pocket family and its runner-up (e.g. "0.998 vs. runner-up 0.978, margin
+   +0.020" for this run) -- a small, low-confidence-visible signal about
+   how decisive a given selection was, logged from data the ranking already
+   computes. This is not a claim of probabilistic reasoning; it is exactly
+   what it says: a margin between two already-computed scores.

@@ -56,7 +56,7 @@ def _score_all(results, pocket, families_entry, cfg, n_states, max_vol):
 
 
 def run_simple_mode(mode: str, config_path: Path, ligand_csv: Path, out_root: Path,
-                    seed: int = 42) -> dict:
+                    seed: int = 42, shared_structures: list[Path] | None = None) -> dict:
     """Runs the non-agentic baselines with the same real tooling."""
     t0 = time.time()
     cfg = yaml.safe_load(Path(config_path).read_text())
@@ -93,8 +93,9 @@ def run_simple_mode(mode: str, config_path: Path, ligand_csv: Path, out_root: Pa
         ens = engines.generate_ensemble(sub_cfg, dirs["structures"])
         event(f"STATIC baseline: single structure {baseline_id}, no ensemble generated")
     else:
-        ens = engines.generate_ensemble(cfg, dirs["structures"])
-        event(f"{mode}: ensemble of {len(ens.structures)} states")
+        ens = engines.generate_ensemble(cfg, dirs["structures"], shared_structures=shared_structures)
+        tag = " (shared master ensemble)" if shared_structures is not None else ""
+        event(f"{mode}: ensemble of {len(ens.structures)} states{tag}")
 
     candidates = engines.find_pockets(list(ens.structures), dirs["pockets"], gt)
     event(f"{len(candidates)} raw pocket candidates")
@@ -105,10 +106,21 @@ def run_simple_mode(mode: str, config_path: Path, ligand_csv: Path, out_root: Pa
         chosen_family = rng.choice(families)
         event(f"RANDOM baseline: pocket chosen at random (seed={seed}), no ranking applied")
     elif mode == "no-pocket-guidance":
-        # No geometric guidance: take the first pocket of the first state.
-        chosen_family = next(f for f in families
-                             if f["representative"].state_pdb_id == Path(ens.structures[0]).stem)
-        event("NO-POCKET-GUIDANCE: first cavity of first state, no volumetric ranking")
+        # No geometric guidance: take the first pocket of the first state that
+        # has any detected cavity at all. Assuming state index 0 always has a
+        # detection (the original code) is not guaranteed -- fpocket can find
+        # zero candidates in a specific conformer, and did on this real shared
+        # ensemble's frame_0000, which crashed with StopIteration before this
+        # fix. This still applies no volumetric/novelty guidance -- it just
+        # doesn't hard-crash when the very first state happens to be empty.
+        by_state = {f["representative"].state_pdb_id: f for f in families}
+        chosen_family = next((by_state[Path(s).stem] for s in ens.structures
+                              if Path(s).stem in by_state), None)
+        if chosen_family is None:
+            raise RuntimeError("no-pocket-guidance: no state in the ensemble has any "
+                               "detected pocket family")
+        event(f"NO-POCKET-GUIDANCE: first cavity of first state with any detection "
+              f"({chosen_family['representative'].state_pdb_id}), no volumetric ranking")
     else:
         chosen_family = engines.rank_pocket_families(families)[0]
         event(f"Ranked {len(families)} families on druggability+novelty+volume")
@@ -150,11 +162,13 @@ def run_simple_mode(mode: str, config_path: Path, ligand_csv: Path, out_root: Pa
 
 
 def run_mode(mode: str, config_path: Path, ligand_csv: Path, out_root: Path = Path("artifacts"),
-             repo: Repository | None = None) -> dict:
+             repo: Repository | None = None, shared_structures: list[Path] | None = None) -> dict:
     if mode in ("static", "random", "no-pocket-guidance"):
-        return run_simple_mode(mode, config_path, ligand_csv, out_root)
+        return run_simple_mode(mode, config_path, ligand_csv, out_root,
+                                shared_structures=shared_structures)
 
-    agent = ClosedLoopAgent(config_path, ligand_csv, out_root, mode=mode, repo=repo)
+    agent = ClosedLoopAgent(config_path, ligand_csv, out_root, mode=mode, repo=repo,
+                             shared_structures=shared_structures)
     if mode == "no-ligand-optimization":
         # Ablate the optimization step by stopping once library evidence exists.
         agent.policy.config = PolicyConfig(max_iterations=1, stop_score=-999.0)

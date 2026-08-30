@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.state import LigandRecord, PocketCandidate
 from tools import bioemu_tool, docking_tool, mdpocket_tool, rdkit_tool, structural_analysis
+from tools.bioemu_tool import EnsembleResult
 
 
 def residue_number(res: str) -> str:
@@ -29,7 +30,29 @@ def ground_truth_overlap(residues: list[str], ground_truth: list[str]) -> float:
     return hits / len(ground_truth)
 
 
-def generate_ensemble(cfg: dict, out_dir: Path):
+def generate_ensemble(cfg: dict, out_dir: Path, shared_structures: list[Path] | None = None):
+    """Generate a fresh ensemble, or wrap an already-generated shared one.
+
+    `shared_structures` exists to remove a real confound in the ablation
+    comparison: static/random/no-pocket-guidance/no-ligand-optimization/
+    conform-agent each independently called BioEmu, so any recall difference
+    between modes was entangled with which random diffusion draw they
+    happened to get, not just their decision logic. Passing the SAME
+    already-generated, already-verified structure list here makes every mode
+    (other than `static`, which is deliberately single-structure) evaluate
+    the identical structural input -- see docs/RESEARCH_CORRECTIONS.md.
+    """
+    if shared_structures is not None:
+        return EnsembleResult(
+            provider="bioemu-shared",
+            structures=list(shared_structures),
+            is_equilibrium_sample=True,
+            metadata={
+                "note": "Reused real BioEmu structures shared across ablation modes to "
+                         "eliminate independent-sampling variance as a confound.",
+                "num_states": len(shared_structures),
+            },
+        )
     return bioemu_tool.get_ensemble(cfg, out_dir)
 
 

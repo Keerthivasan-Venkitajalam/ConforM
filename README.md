@@ -68,11 +68,21 @@ from the objective — selects a cavity that is:
   (replicated independently across two separate BioEmu runs)
 
 Full corrected 5-mode ablation table (static / random / no-pocket-guidance /
-no-ligand-optimization / conform-agent, all real BioEmu runs) and the honest
-caveat about cross-mode sampling variance in
+no-ligand-optimization / conform-agent, all real BioEmu runs) in
 [docs/RESEARCH_CORRECTIONS.md](docs/RESEARCH_CORRECTIONS.md) #8. GNINA CNN
 rescoring was also run for real on this verified result (top hit CNNscore
 0.683).
+
+**Update (2026-08-30): the #8 cross-mode sampling-variance caveat is now
+fixed.** Every non-`static` mode was re-run against the *same* shared,
+already-verified 99-state ensemble (no new GPU sampling needed) — see
+[docs/RESEARCH_CORRECTIONS.md](docs/RESEARCH_CORRECTIONS.md) #9. With the
+confound removed, `no-ligand-optimization` and `conform-agent` converge on
+the identical selected pocket (0.60 recall both), and a 10,000-permutation
+test on the real, unmodified ranking of all 149 detected pocket families
+found the algorithm places the best-overlap family available at rank 2 of
+149 — a rank that good occurs in only 1.44% of random relabelings
+(**p = 0.0144**, not pre-specified).
 
 **This supersedes an earlier false GPU result** (`n_states=1` for every
 mode, a `conform-agent` recall of 0.80) that was caught and retracted before

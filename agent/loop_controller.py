@@ -42,7 +42,9 @@ MAX_TOTAL_STEPS = 20
 class ClosedLoopAgent:
     def __init__(self, config_path: Path, ligand_csv: Path, out_root: Path = Path("artifacts"),
                  mode: str = "conform-agent", repo: Repository | None = None,
-                 max_iterations: int | None = None, budget_seconds: float = 3600.0):
+                 max_iterations: int | None = None, budget_seconds: float = 3600.0,
+                 shared_structures: list[Path] | None = None):
+        self.shared_structures = shared_structures
         self.cfg = yaml.safe_load(Path(config_path).read_text())
         self.config_path = Path(config_path)
         self.ligand_csv = Path(ligand_csv)
@@ -131,7 +133,8 @@ class ClosedLoopAgent:
         action = decision.action
 
         if action is Action.GENERATE_ENSEMBLE:
-            ens = engines.generate_ensemble(self.cfg, self.dirs["structures"])
+            ens = engines.generate_ensemble(self.cfg, self.dirs["structures"],
+                                             shared_structures=self.shared_structures)
             if not ens.structures:
                 raise RuntimeError("Ensemble provider returned zero structures")
             for p in ens.structures:
@@ -219,12 +222,28 @@ class ClosedLoopAgent:
                        f"baseline_volume={top_family['baseline_volume']:.1f}A^3")
             self.event(f"  post-hoc ground-truth overlap={top.ground_truth_overlap:.2f} "
                        "(NOT used in ranking)")
+
+            # Confidence margin: how much better the pick is than the runner-up,
+            # on the same blind score the selection itself used. A large margin
+            # means the ranking was decisive; a small one means the top few
+            # candidates were close and the pick is comparatively low-confidence
+            # -- this is the one piece of self-assessment the agent logs about
+            # its own decision, not a claim of probabilistic reasoning.
+            runner_up_score = ranked[1]["rank_score"] if len(ranked) > 1 else None
+            margin = (top_family["rank_score"] - runner_up_score) if runner_up_score is not None else None
+            if margin is not None:
+                self.event(f"  selection margin: {top_family['rank_score']:.3f} vs. runner-up "
+                           f"{runner_up_score:.3f} (margin {margin:+.3f})")
+            else:
+                self.event("  selection margin: only one pocket family found -- no runner-up")
+
             return ({"tool": "rank_pocket_families", "selected": top.key,
                      "n_families": len(ranked), "volume": top.volume,
                      "druggability": top.druggability, "novelty": top_family["novelty"],
                      "persistence": top_family["persistence"],
                      "cryptic_volume_gain": top_family["cryptic_volume_gain"],
-                     "ground_truth_overlap": top.ground_truth_overlap},
+                     "ground_truth_overlap": top.ground_truth_overlap,
+                     "selection_margin": margin},
                     f"Grouped {len(self.state.pocket_candidates)} per-state cavities into "
                     f"{len(ranked)} cross-state families and ranked them blind on "
                     f"druggability + novelty-vs-baseline + volume. Committed to {top.key}: "

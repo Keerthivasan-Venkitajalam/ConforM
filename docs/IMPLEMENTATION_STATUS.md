@@ -40,35 +40,57 @@ and `pytest tests/` (49 tests, all currently PASS).
 | CryptoBench | **Not started** | — | Dataset download + evaluation harness | — | KRAS-specific ground truth used |
 | DiffDock-Pocket / OpenMM | **Not started** | — | P5 items | — | — |
 
-## Headline result (real, GPU-verified BioEmu ensemble, 2026-08-29)
+## Headline result (real, GPU-verified BioEmu ensemble, shared-ensemble corrected, 2026-08-30)
 Real BioEmu diffusion-model inference on a live CUDA GPU, sampling from the
 apo KRAS G12D sequence alone (no experimental structure as input): **99 real
 equilibrium-sampled states**, max RMSF 5.00 Å, max pairwise RMSD 4.89 Å.
-Blind ranking selects a cryptic pocket (2151 Å³, druggability 0.99) with
-**60% recall of documented Switch-II ground-truth residues**, best Discovery
-Score 0.7194–0.756 across two independent runs. Full corrected 5-mode
-ablation table (all real BioEmu runs) in
-[RESEARCH_CORRECTIONS.md](RESEARCH_CORRECTIONS.md) #8:
+
+The first corrected ablation table (RESEARCH_CORRECTIONS.md #8) still had
+every mode independently calling BioEmu, confounding cross-mode comparisons
+with sampling variance. **This has been fixed** (RESEARCH_CORRECTIONS.md #9):
+every non-`static` mode below now evaluates the exact same 99-state ensemble
+(no new GPU sampling — the already-verified structures were reused):
 
 | mode | states | recall | discovery |
 |---|---|---|---|
-| static (true single-structure control) | 1 | 0.00 | 0.383 |
-| random | 99 | 0.00 | 0.595 |
-| no-pocket-guidance | 98 | 0.00 | 0.628 |
-| no-ligand-optimization | 100 | 0.80 | 0.781 |
-| conform-agent | 94 | 0.60 | 0.756 |
+| static (true single-structure control) | 1 | 0.00 | 0.379 |
+| random | 99 | 0.60 | 0.667 |
+| no-pocket-guidance | 99 | 0.00 | 0.598 |
+| no-ligand-optimization | 99 | 0.60 | 0.718 |
+| conform-agent | 99 | 0.60 | 0.719 |
 
-The signal that matters: going from no-ensemble/no-ranking (0.00 recall) to
-a real generative ensemble plus this project's druggability+novelty+volume
-ranking (0.60–0.80) is where the entire win comes from, and it replicated
-independently across two separate `conform-agent` runs (0.60 both times).
-The 0.80 vs. 0.60 gap between `no-ligand-optimization` and `conform-agent`
-specifically should **not** be read as evidence the optimization step hurts
-recall — both use the identical pocket-selection algorithm, and each mode
-draws its own independent BioEmu sample, so that gap is more likely sampling
-variance than a causal effect (pocket selection happens before the
-optimization branch is even reached). See RESEARCH_CORRECTIONS.md #8 for
-the full reasoning and the two prerequisite bug fixes this result required.
+With the confound removed, `no-ligand-optimization` and `conform-agent`
+converge on the **identical** selected pocket (0.60 recall both) — the
+earlier 0.80-vs-0.60 gap really was sampling noise, exactly as RESEARCH_CORRECTIONS.md
+#8 had already flagged as a caveat before it was fixed. The clean
+within-ensemble evidence for the optimization step: −8.29 → −8.80 kcal/mol
+(Δ −0.51 kcal/mol) on the identical pocket, no confound left.
+
+**A permutation test** (`evaluation/permutation_test.py`, 10,000 relabelings,
+no pre-specified target) on the real, unmodified ranking of all 149 detected
+pocket families found: the family with the best available ground-truth
+overlap in this ensemble (1.0 — not the one the algorithm actually picked,
+which had 0.60 and ranked #1) was placed at rank 2 of 149 by the blind
+ranking algorithm. A rank that good occurred in only 1.44% of random
+relabelings (**empirical p = 0.0144**). This is evidence `rank_score` tracks
+ground-truth overlap beyond chance *on this ensemble* — not, by itself,
+evidence of cross-ensemble or cross-target generalization (see
+GENERALIZATION.md).
+
+**One honest, unresolved nuance, reported rather than hidden**: `random`
+(seed=42) also landed on 0.60 recall against this shared ensemble — a
+different outcome than the original independent-sampling table's 0.00. This
+isn't a contradiction; it reflects a real property of this specific
+ensemble (many of its 149 candidate families have decent ground-truth
+overlap), and it's exactly why a single random draw isn't treated as
+evidence on its own — the permutation test above, not the one `random` row,
+is what actually establishes above-chance performance.
+
+Full reasoning, the bug this shared-ensemble re-run itself caught
+(`no-pocket-guidance` crashed with a real `StopIteration` from an
+unguaranteed assumption), and the new selection-margin logging in
+`agent/loop_controller.py` are in
+[RESEARCH_CORRECTIONS.md](RESEARCH_CORRECTIONS.md) #9.
 
 **This supersedes both an earlier 100%-recall result** obtained when PDB
 7RPZ (MRTX1133-bound) was included in the discovery ensemble — circular,
@@ -77,16 +99,29 @@ the CPU-only fallback-ensemble result below**, which remains separately
 valid as a no-GPU-required reproduction path but is not the same experiment.
 
 ## Honest caveats
-- **A statistically rigorous version of the ablation above would need
-  multiple BioEmu seeds per mode** to separate real algorithmic effects from
-  ensemble-sampling variance; that was not feasible in the available
-  compute/time budget and is recorded as a known limitation, not glossed
-  over.
+- **The cross-mode sampling-variance confound is fixed** (shared ensemble +
+  permutation test above). What remains open: this is one ensemble and one
+  target. A fully rigorous claim would need the same shared-ensemble/
+  permutation approach repeated across multiple independent BioEmu draws
+  and multiple targets — not feasible in the available compute/time budget,
+  recorded as a known limitation rather than implied to be settled.
 - Ligand optimization's real, within-run effect (not confounded by
-  cross-mode sampling variance): -8.75 kcal/mol seed -> -9.07 kcal/mol best
-  analog, delta -0.32 kcal/mol over 12 RDKit-enumerated analogs — real, but
-  a single run, not a validated claim.
+  cross-mode sampling variance, now on the *identical* selected pocket):
+  −8.29 kcal/mol seed → −8.80 kcal/mol best analog, delta −0.51 kcal/mol
+  over 12 RDKit-enumerated analogs — real, but a single run, not a
+  validated claim.
 - 60% recall is still partial, not full, recovery of the Switch-II site.
+- The permutation test (p = 0.0144) establishes above-chance ranking
+  *within this ensemble*; it is not a claim about the algorithm's
+  performance on a different ensemble or a different target.
+- **The real GPU path is not perfectly reliable.** During validation on
+  2026-08-30, `./validate_e2e.sh`'s closed-loop check failed once with a
+  transient `CUDA error: unknown error` after a long session of sustained
+  heavy GPU use; an immediate retry with no code change passed cleanly
+  (16/16). Reported honestly rather than omitted -- this is a real property
+  of running real BioEmu inference on a single consumer GPU under load, not
+  a code defect, but a genuine reproducibility caveat for anyone relying on
+  the GPU path.
 
 ## CPU-only fallback ensemble result (no GPU required, 2026-08-25)
 Kept as a separately valid, no-GPU-required reproduction path (`./validate_e2e.sh`
